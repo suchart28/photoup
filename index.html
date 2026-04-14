@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>อัปโหลดรูปภาพร่วมสนุก</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.js"></script>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white p-6 rounded-2xl shadow-lg w-full max-w-sm text-center">
+        <h1 class="text-2xl font-bold mb-4">ส่งรูปขึ้นจอ 📸</h1>
+        <input type="file" id="photoInput" accept="image/*" class="hidden">
+        <button id="uploadBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-full w-full shadow-md active:scale-95 transition">
+            เลือกรูปภาพ / ถ่ายรูป
+        </button>
+        <p id="status" class="mt-4 text-sm text-gray-600"></p>
+    </div>
+
+    <script type="module">
+        import { db, storage } from './firebase-config.js';
+        import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+        import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js";
+
+        const photoInput = document.getElementById('photoInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const statusTxt = document.getElementById('status');
+
+        uploadBtn.addEventListener('click', () => photoInput.click());
+
+        photoInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            statusTxt.innerHTML = "กำลังเตรียมรูปภาพ... ⏳";
+            uploadBtn.disabled = true;
+
+            try {
+                // บีบอัดรูปภาพ (Max 1MB, Resolution 1920px)
+                const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true };
+                const compressedFile = await imageCompression(file, options);
+
+                statusTxt.innerHTML = "กำลังส่งรูปภาพ... 🚀";
+                const fileName = `events/${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`;
+                const storageRef = ref(storage, fileName);
+                
+                // อัปโหลดขึ้น Firebase Storage
+                await uploadBytes(storageRef, compressedFile);
+                const downloadURL = await getDownloadURL(storageRef);
+
+                // บันทึกลง Firestore
+                await addDoc(collection(db, "photos"), {
+                    url: downloadURL,
+                    timestamp: serverTimestamp(),
+                    status: 'pending'
+                });
+
+                statusTxt.innerHTML = "✅ ส่งรูปภาพสำเร็จ! รอดูบนจอได้เลย";
+                statusTxt.className = "mt-4 text-sm text-green-600 font-bold";
+            } catch (error) {
+                console.error(error);
+                statusTxt.innerHTML = "❌ เกิดข้อผิดพลาด กรุณาลองใหม่";
+                statusTxt.className = "mt-4 text-sm text-red-600 font-bold";
+            } finally {
+                uploadBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
