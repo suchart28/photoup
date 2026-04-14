@@ -6,21 +6,37 @@
     <title>Admin - จัดการระบบ</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 p-6 min-h-screen">
-    <div class="max-w-6xl mx-auto">
-        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-            <div>
-                <h1 class="text-3xl font-bold text-gray-800">จัดการคิวรูปภาพ ⚙️</h1>
-                <p class="text-gray-500">จัดการรูปภาพที่ส่งมาจากผู้ใช้งาน</p>
-            </div>
-            
-            <button id="clearAllBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all active:scale-95">
-                ล้างฐานข้อมูลทั้งหมด
-            </button>
-        </div>
+<body class="bg-gray-100 min-h-screen relative">
 
-        <div id="gallery" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-            <p class="text-gray-400 col-span-full text-center py-10">กำลังโหลดรูปภาพ...</p>
+    <div id="loginOverlay" class="fixed inset-0 bg-gray-800 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center">
+            <div class="text-4xl mb-4">🔒</div>
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">สำหรับทีมงานเท่านั้น</h2>
+            <input type="password" id="pinInput" placeholder="ใส่รหัสผ่าน 6 หลัก" maxlength="6" 
+                   class="w-full p-4 border-2 border-gray-200 rounded-xl mb-4 text-center text-2xl tracking-[0.5em] focus:outline-none focus:border-blue-500 transition">
+            <button id="loginBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl w-full shadow-lg active:scale-95 transition-all text-lg">
+                เข้าสู่ระบบ
+            </button>
+            <p id="loginError" class="text-red-500 text-sm mt-4 font-medium hidden">❌ รหัสผ่านไม่ถูกต้อง ลองใหม่อีกครั้ง</p>
+        </div>
+    </div>
+
+    <div id="adminContent" class="hidden p-6">
+        <div class="max-w-6xl mx-auto">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800">จัดการคิวรูปภาพ ⚙️</h1>
+                    <p class="text-gray-500">จัดการรูปภาพที่ส่งมาจากผู้ใช้งาน</p>
+                </div>
+                
+                <button id="clearAllBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all active:scale-95">
+                    ล้างฐานข้อมูลทั้งหมด
+                </button>
+            </div>
+
+            <div id="gallery" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+                <p class="text-gray-400 col-span-full text-center py-10">กำลังโหลดรูปภาพ...</p>
+            </div>
         </div>
     </div>
 
@@ -28,10 +44,52 @@
         import { db } from './firebase-config.js';
         import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
+        // ==========================================
+        // 1. ระบบจัดการ รหัสผ่าน (Login System)
+        // ==========================================
+        const loginOverlay = document.getElementById('loginOverlay');
+        const adminContent = document.getElementById('adminContent');
+        const pinInput = document.getElementById('pinInput');
+        const loginBtn = document.getElementById('loginBtn');
+        const loginError = document.getElementById('loginError');
+        
+        const ADMIN_PIN = "878556"; // รหัสผ่านของคุณ
+
+        // ตรวจสอบว่าเคย Login ผ่านแล้วหรือยังใน Session นี้
+        if (sessionStorage.getItem('adminAuth') === 'true') {
+            grantAccess();
+        }
+
+        // กดปุ่มเพื่อ Login
+        loginBtn.addEventListener('click', checkPin);
+        
+        // กดปุ่ม Enter ในช่องพิมพ์รหัสเพื่อ Login ได้เลย
+        pinInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') checkPin();
+        });
+
+        function checkPin() {
+            if (pinInput.value === ADMIN_PIN) {
+                sessionStorage.setItem('adminAuth', 'true');
+                grantAccess();
+            } else {
+                loginError.classList.remove('hidden');
+                pinInput.value = ''; // ล้างช่องพิมพ์
+                pinInput.focus();
+            }
+        }
+
+        function grantAccess() {
+            loginOverlay.classList.add('hidden'); // ซ่อนหน้า Login
+            adminContent.classList.remove('hidden'); // โชว์หน้า Admin
+        }
+
+        // ==========================================
+        // 2. ระบบจัดการรูปภาพ (Admin System)
+        // ==========================================
         const gallery = document.getElementById('gallery');
         const clearAllBtn = document.getElementById('clearAllBtn');
 
-        // 1. ฟังก์ชันลบข้อมูลทั้งหมด (ปุ่มใหญ่ด้านบน)
         clearAllBtn.addEventListener('click', async () => {
             if (confirm("⚠️ คุณแน่ใจหรือไม่ที่จะลบรูปภาพ 'ทั้งหมด' ในระบบ?")) {
                 const querySnapshot = await getDocs(collection(db, "photos"));
@@ -41,7 +99,6 @@
             }
         });
 
-        // 2. ดึงรูปจาก Firestore มาแสดงผลแบบ Real-time
         const q = query(collection(db, "photos"), orderBy("timestamp", "desc"));
         onSnapshot(q, (snapshot) => {
             gallery.innerHTML = '';
@@ -53,7 +110,7 @@
 
             snapshot.forEach((docSnap) => {
                 const data = docSnap.data();
-                const docId = docSnap.id; // เก็บ ID ของ Document ไว้สำหรับลบ
+                const docId = docSnap.id;
                 
                 const card = document.createElement('div');
                 card.className = "bg-white p-3 rounded-xl shadow-sm border border-gray-200 flex flex-col";
@@ -75,7 +132,6 @@
                 gallery.appendChild(card);
             });
 
-            // 3. ผูก Event ให้ปุ่ม "ส่งขึ้นจอ"
             document.querySelectorAll('.send-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     const url = e.target.getAttribute('data-url');
@@ -92,14 +148,12 @@
                 });
             });
 
-            // 4. ผูก Event ให้ปุ่ม "ลบรูปนี้"
             document.querySelectorAll('.delete-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     const id = e.target.getAttribute('data-id');
                     if (confirm("ยืนยันการลบรูปภาพนี้?")) {
                         try {
                             await deleteDoc(doc(db, "photos", id));
-                            // ไม่ต้องทำอะไรเพิ่ม ระบบ onSnapshot จะอัปเดตหน้าจอให้เองอัตโนมัติ
                         } catch (err) {
                             console.error("Error deleting document: ", err);
                             alert("ไม่สามารถลบรูปภาพได้");
