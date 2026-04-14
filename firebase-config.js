@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-import { getStorage } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-storage.js";
-import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-analytics.js";
+// เอา Storage ออก
+// import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-analytics.js"; // เก็บไว้ได้ถ้าต้องการดูสถิติ
 
 const firebaseConfig = {
     apiKey: "AIzaSyDMMwciq6QoLSaWK6xfdr0U3ynyahtoaSk",
@@ -14,10 +14,6 @@ const firebaseConfig = {
     measurementId: "G-KRYLYFMJVF"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-
-// Export ตัวแปรไปให้หน้าอื่นใช้งาน
-export const db = getFirestore(app);
-export const storage = getStorage(app);
-export const analytics = getAnalytics(app);
+export const db = getFirestore(app); 
+// ไม่ต้อง export storage แล้ว
