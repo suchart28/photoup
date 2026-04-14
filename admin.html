@@ -2,20 +2,26 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - จัดการระบบ</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 p-6">
+<body class="bg-gray-100 p-6 min-h-screen">
     <div class="max-w-6xl mx-auto">
-        <div class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-bold">จัดการคิวรูปภาพ ⚙️</h1>
-            <button id="clearBtn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded shadow">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-800">จัดการคิวรูปภาพ ⚙️</h1>
+                <p class="text-gray-500">จัดการรูปภาพที่ส่งมาจากผู้ใช้งาน</p>
+            </div>
+            
+            <button id="clearAllBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all active:scale-95">
                 ล้างฐานข้อมูลทั้งหมด
             </button>
         </div>
 
-        <div id="gallery" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            </div>
+        <div id="gallery" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+            <p class="text-gray-400 col-span-full text-center py-10">กำลังโหลดรูปภาพ...</p>
+        </div>
     </div>
 
     <script type="module">
@@ -23,37 +29,82 @@
         import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
         const gallery = document.getElementById('gallery');
-        const clearBtn = document.getElementById('clearBtn');
+        const clearAllBtn = document.getElementById('clearAllBtn');
 
-        // ฟังก์ชันลบข้อมูลทั้งหมด
-        clearBtn.addEventListener('click', async () => {
-            if (confirm("⚠️ คุณแน่ใจหรือไม่ที่จะลบรูปภาพทั้งหมด? ข้อมูลจะหายถาวร!")) {
+        // 1. ฟังก์ชันลบข้อมูลทั้งหมด (ปุ่มใหญ่ด้านบน)
+        clearAllBtn.addEventListener('click', async () => {
+            if (confirm("⚠️ คุณแน่ใจหรือไม่ที่จะลบรูปภาพ 'ทั้งหมด' ในระบบ?")) {
                 const querySnapshot = await getDocs(collection(db, "photos"));
                 const deletePromises = querySnapshot.docs.map(docSnap => deleteDoc(doc(db, "photos", docSnap.id)));
                 await Promise.all(deletePromises);
-                alert("ล้างข้อมูลเรียบร้อยแล้ว");
+                alert("ล้างข้อมูลทั้งหมดเรียบร้อยแล้ว");
             }
         });
 
-        // ดึงรูปมาแสดง
+        // 2. ดึงรูปจาก Firestore มาแสดงผลแบบ Real-time
         const q = query(collection(db, "photos"), orderBy("timestamp", "desc"));
         onSnapshot(q, (snapshot) => {
             gallery.innerHTML = '';
+            
+            if (snapshot.empty) {
+                gallery.innerHTML = '<p class="text-gray-400 col-span-full text-center py-10">ยังไม่มีรูปภาพในระบบ</p>';
+                return;
+            }
+
             snapshot.forEach((docSnap) => {
                 const data = docSnap.data();
-                const div = document.createElement('div');
-                div.className = "bg-white p-2 rounded shadow";
-                div.innerHTML = `
-                    <img src="${data.url}" class="w-full h-32 object-cover rounded mb-2">
-                    <button class="bg-green-500 w-full text-white text-xs py-1 rounded send-btn" data-url="${data.url}">ส่งขึ้นจอ</button>
+                const docId = docSnap.id; // เก็บ ID ของ Document ไว้สำหรับลบ
+                
+                const card = document.createElement('div');
+                card.className = "bg-white p-3 rounded-xl shadow-sm border border-gray-200 flex flex-col";
+                card.innerHTML = `
+                    <div class="relative group h-40 mb-3 overflow-hidden rounded-lg bg-gray-100">
+                        <img src="${data.url}" class="w-full h-full object-cover">
+                    </div>
+                    <div class="space-y-2">
+                        <button class="bg-green-500 hover:bg-green-600 text-white w-full py-2 rounded-md font-bold text-sm transition send-btn" 
+                                data-url="${data.url}">
+                            ส่งขึ้นจอ
+                        </button>
+                        <button class="bg-gray-100 hover:bg-red-100 hover:text-red-600 text-gray-500 w-full py-2 rounded-md font-medium text-xs transition delete-btn" 
+                                data-id="${docId}">
+                            ลบรูปนี้
+                        </button>
+                    </div>
                 `;
-                gallery.appendChild(div);
+                gallery.appendChild(card);
             });
 
+            // 3. ผูก Event ให้ปุ่ม "ส่งขึ้นจอ"
             document.querySelectorAll('.send-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     const url = e.target.getAttribute('data-url');
-                    await setDoc(doc(db, "display", "main"), { currentImageUrl: url, time: Date.now() });
+                    try {
+                        await setDoc(doc(db, "display", "main"), { 
+                            currentImageUrl: url, 
+                            time: Date.now() 
+                        });
+                        e.target.innerText = "✅ ส่งแล้ว";
+                        setTimeout(() => e.target.innerText = "ส่งขึ้นจอ", 2000);
+                    } catch (err) {
+                        console.error(err);
+                    }
+                });
+            });
+
+            // 4. ผูก Event ให้ปุ่ม "ลบรูปนี้"
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = e.target.getAttribute('data-id');
+                    if (confirm("ยืนยันการลบรูปภาพนี้?")) {
+                        try {
+                            await deleteDoc(doc(db, "photos", id));
+                            // ไม่ต้องทำอะไรเพิ่ม ระบบ onSnapshot จะอัปเดตหน้าจอให้เองอัตโนมัติ
+                        } catch (err) {
+                            console.error("Error deleting document: ", err);
+                            alert("ไม่สามารถลบรูปภาพได้");
+                        }
+                    }
                 });
             });
         });
