@@ -29,12 +29,6 @@
         let slideInterval = null;
         let manualOverride = false;
 
-        // 1. สร้าง QR Code
-        new QRCode(document.getElementById("qrcode"), {
-            text: "https://suchart28.github.io/photoup/",
-            width: 120, height: 120
-        });
-
         // 2. ฟังก์ชันเริ่ม Slide Show
         function startSlideshow() {
             if (slideInterval) clearInterval(slideInterval);
