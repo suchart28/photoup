@@ -6,38 +6,25 @@
     <title>อัปโหลดรูปภาพร่วมสนุก</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
-<body class="bg-gray-100 h-screen flex flex-col items-center p-4">
+<body class="bg-gray-100 h-screen flex flex-col items-center justify-center p-4">
 
-    <div class="w-full flex justify-center mt-10 mb-6">
-        <div id="qrcode" class="p-2 bg-white rounded-xl shadow-md"></div>
-    </div>
-
-    <div class="bg-white p-6 rounded-2xl shadow-lg w-full max-w-sm text-center">
-        <h1 class="text-2xl font-bold mb-4">ส่งรูปขึ้นจอ 📸</h1>
-        <p class="mb-6 text-gray-600">สแกน QR Code ด้านบนเพื่อเข้าสู่หน้าเว็บ หรือกดปุ่มด้านล่างเพื่อเลือกรูปภาพ</p>
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
+        <div class="text-6xl mb-4">📸</div>
+        <h1 class="text-2xl font-bold mb-2">ส่งรูปขึ้นจอ</h1>
+        <p class="mb-8 text-gray-500">เลือกรูปภาพหรือถ่ายรูปเพื่อแสดงบนเวที</p>
+        
         <input type="file" id="photoInput" accept="image/*" class="hidden">
-        <button id="uploadBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-full w-full shadow-md active:scale-95 transition">
-            เลือกรูปภาพ / ถ่ายรูป
+        <button id="uploadBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-full w-full shadow-lg active:scale-95 transition-all text-lg">
+            ถ่ายรูป / เลือกรูปภาพ
         </button>
-        <p id="status" class="mt-4 text-sm text-gray-600"></p>
+        
+        <p id="status" class="mt-6 text-sm text-gray-600 min-h-[1.25rem]"></p>
     </div>
 
     <script type="module">
-        import { db } from './firebase-config.js'; // สังเกตว่าเราเอา storage ออกไปแล้ว
+        import { db } from './firebase-config.js';
         import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
-
-        // ส่วนสร้าง QR Code
-        const urlToEncode = "https://suchart28.github.io/photoup/";
-        new QRCode(document.getElementById("qrcode"), {
-            text: urlToEncode,
-            width: 180,
-            height: 180,
-            colorDark: "#000000",
-            colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.H
-        });
 
         const photoInput = document.getElementById('photoInput');
         const uploadBtn = document.getElementById('uploadBtn');
@@ -50,37 +37,30 @@
             if (!file) return;
 
             statusTxt.innerHTML = "กำลังเตรียมรูปภาพ... ⏳";
+            statusTxt.className = "mt-6 text-sm text-blue-600 font-bold";
             uploadBtn.disabled = true;
 
             try {
-                // บีบอัดรูปภาพให้เหลือไม่เกิน 500KB (0.5MB) เพื่อไม่ให้เกินลิมิตของ Firestore
                 const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true };
                 const compressedFile = await imageCompression(file, options);
 
-                statusTxt.innerHTML = "กำลังส่งรูปภาพ... 🚀";
-
-                // เทคนิค: แปลงไฟล์รูปภาพเป็นรหัสข้อความ (Base64)
                 const reader = new FileReader();
                 reader.readAsDataURL(compressedFile);
                 reader.onloadend = async () => {
                     const base64data = reader.result;
-
-                    // บันทึกข้อความ Base64 ลง Firestore โดยตรงเลย ไม่ต้องง้อ Storage
                     await addDoc(collection(db, "photos"), {
                         url: base64data,
-                        timestamp: serverTimestamp(),
-                        status: 'pending'
+                        timestamp: serverTimestamp()
                     });
 
-                    statusTxt.innerHTML = "✅ ส่งรูปภาพสำเร็จ! รอดูบนจอได้เลย";
-                    statusTxt.className = "mt-4 text-sm text-green-600 font-bold";
+                    statusTxt.innerHTML = "✅ ส่งรูปภาพสำเร็จ!";
+                    statusTxt.className = "mt-6 text-sm text-green-600 font-bold";
                     uploadBtn.disabled = false;
+                    photoInput.value = ""; // Reset input
                 };
-
             } catch (error) {
-                console.error(error);
-                statusTxt.innerHTML = "❌ เกิดข้อผิดพลาด กรุณาลองใหม่";
-                statusTxt.className = "mt-4 text-sm text-red-600 font-bold";
+                statusTxt.innerHTML = "❌ เกิดข้อผิดพลาด";
+                statusTxt.className = "mt-6 text-sm text-red-600 font-bold";
                 uploadBtn.disabled = false;
             }
         });
