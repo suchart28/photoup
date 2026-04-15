@@ -6,18 +6,19 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        body { background-color: #000; overflow: hidden; margin: 0; }
-        #displayImg { 
-            width: 100vw; height: 100vh; object-fit: contain; 
-            transition: opacity 1s ease-in-out; 
-        }
+        body { background-color: #000; overflow: hidden; margin: 0; font-family: sans-serif; }
+        #displayImg { width: 100vw; height: 100vh; object-fit: contain; transition: opacity 1s ease-in-out; }
         .fade-out { opacity: 0; }
-        .fade-in { opacity: 1; }
     </style>
 </head>
 <body class="relative flex items-center justify-center">
 
-    <img id="displayImg" class="fade-in" src="" alt="Screen">
+    <div class="absolute top-6 z-20 flex flex-col items-center bg-white/90 p-3 rounded-2xl shadow-2xl">
+        <div id="qrcode"></div>
+        <p class="font-bold mt-2 text-black text-sm">สแกนเพื่อส่งรูป</p>
+    </div>
+
+    <img id="displayImg" src="" alt="Screen">
 
     <script type="module">
         import { db } from './firebase-config.js';
@@ -29,17 +30,12 @@
         let slideInterval = null;
         let manualOverride = false;
 
-        // 2. ฟังก์ชันเริ่ม Slide Show
-        function startSlideshow() {
-            if (slideInterval) clearInterval(slideInterval);
-            slideInterval = setInterval(() => {
-                if (!manualOverride && latestPhotos.length > 0) {
-                    showImage(latestPhotos[currentIndex].url);
-                    currentIndex = (currentIndex + 1) % latestPhotos.length;
-                }
-            }, 5000); // เปลี่ยนรูปทุก 5 วินาที
-        }
+        new QRCode(document.getElementById("qrcode"), {
+            text: "https://suchart28.github.io/photoup/",
+            width: 150, height: 150
+        });
 
+        // ฟังก์ชันสลับภาพ (ไม่ต้องรับค่า caption แล้ว)
         function showImage(url) {
             if (displayImg.src === url) return;
             displayImg.classList.add('fade-out');
@@ -49,27 +45,30 @@
             }, 1000);
         }
 
-        // 3. ดักฟัง 10 รูปล่าสุด (Auto Mode)
+        function startSlideshow() {
+            if (slideInterval) clearInterval(slideInterval);
+            slideInterval = setInterval(() => {
+                if (!manualOverride && latestPhotos.length > 0) {
+                    const p = latestPhotos[currentIndex];
+                    showImage(p.url);
+                    currentIndex = (currentIndex + 1) % latestPhotos.length;
+                }
+            }, 6000);
+        }
+
         const q = query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(10));
         onSnapshot(q, (snapshot) => {
-            latestPhotos = snapshot.docs.map(doc => doc.data()).filter(data => data.url);
-            if (!manualOverride && latestPhotos.length > 0 && !slideInterval) {
-                startSlideshow();
-            }
+            latestPhotos = snapshot.docs.map(doc => doc.data());
+            if (!manualOverride && latestPhotos.length > 0 && !slideInterval) startSlideshow();
         });
 
-        // 4. ดักฟังคำสั่งจาก Admin (Manual Mode)
         onSnapshot(doc(db, "display", "main"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 manualOverride = true;
                 showImage(data.currentImageUrl);
-                
-                // หลังจากแสดงภาพที่ Admin สั่ง 15 วินาที ให้กลับไปโหมด Auto
                 clearTimeout(window.manualTimer);
-                window.manualTimer = setTimeout(() => {
-                    manualOverride = false;
-                }, 15000);
+                window.manualTimer = setTimeout(() => { manualOverride = false; }, 15000); // โชว์ค้าง 15 วิ
             }
         });
     </script>
