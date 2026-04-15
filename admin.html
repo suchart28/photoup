@@ -6,33 +6,44 @@
     <title>Admin - ระบบจัดการรูปภาพ</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-900 min-h-screen text-white relative">
+<body class="bg-gray-900 min-h-screen text-white">
 
     <div id="loginOverlay" class="fixed inset-0 bg-black flex items-center justify-center z-50">
         <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center">
             <h2 class="text-2xl font-bold mb-6 text-gray-800">รหัสผ่านแอดมิน</h2>
             <input type="password" id="pinInput" placeholder="รหัส 6 หลัก" maxlength="6" 
-                   class="w-full p-4 border-2 border-gray-200 rounded-xl mb-4 text-center text-2xl text-black focus:outline-none focus:border-blue-500">
-            <button id="loginBtn" class="bg-blue-600 hover:bg-blue-700 w-full py-4 rounded-xl font-bold text-lg transition-all active:scale-95">
-                เข้าสู่ระบบ
-            </button>
+                   class="w-full p-4 border-2 border-gray-200 rounded-xl mb-4 text-center text-2xl text-black">
+            <button id="loginBtn" class="bg-blue-600 w-full py-4 rounded-xl font-bold">เข้าสู่ระบบ</button>
         </div>
     </div>
 
     <div id="adminContent" class="hidden p-6">
         <div class="max-w-7xl mx-auto">
-            <div class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-gray-700 pb-6 gap-4">
+            
+            <div class="flex flex-col md:flex-row justify-between items-center mb-6 border-b border-gray-700 pb-6 gap-4">
                 <div>
-                    <h1 class="text-3xl font-bold text-blue-400">ระบบคัดกรองภาพ Real-time ⚡</h1>
-                    <p class="text-gray-400">ภาพที่ผ่าน AI จะมาแสดงที่นี่ แอดมินสามารถลบภาพไม่เหมาะสม หรือบังคับภาพขึ้นจอได้</p>
+                    <h1 class="text-3xl font-bold text-blue-400">Admin Control Center ⚡</h1>
+                    <p class="text-gray-400">จัดการการแสดงผลและคัดกรองรูปภาพ</p>
                 </div>
-                <button id="clearAllBtn" class="bg-red-900/50 hover:bg-red-600 text-red-200 px-6 py-3 rounded-xl text-sm font-bold border border-red-700 transition-all">
+                <button id="clearAllBtn" class="bg-red-900/50 hover:bg-red-600 text-red-200 px-6 py-3 rounded-xl font-bold border border-red-700">
                     🗑️ ล้างรูปทั้งหมดในระบบ
                 </button>
             </div>
 
-            <div id="gallery" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            <div class="bg-gray-800 p-6 rounded-2xl mb-8 border border-blue-500/30">
+                <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📺 ตั้งค่าโหมดการแสดงผลหน้าจอ</h2>
+                <div class="flex gap-4">
+                    <button id="setModeLatest" class="flex-1 bg-gray-700 hover:bg-blue-600 py-4 rounded-xl font-bold transition-all border border-gray-600">
+                        โหมด: สุ่ม 10 ภาพล่าสุด
+                    </button>
+                    <button id="setModeAll" class="flex-1 bg-gray-700 hover:bg-blue-600 py-4 rounded-xl font-bold transition-all border border-gray-600">
+                        โหมด: สุ่มจากภาพทั้งหมด
+                    </button>
                 </div>
+                <p id="currentModeStatus" class="mt-3 text-center text-blue-400 font-medium">สถานะปัจจุบัน: กำลังโหลด...</p>
+            </div>
+
+            <div id="gallery" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
         </div>
     </div>
 
@@ -40,101 +51,65 @@
         import { db } from './firebase-config.js';
         import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
-        // --- 1. ระบบ Login ---
-        const ADMIN_PIN = "878556"; // รหัสผ่านของคุณ
-        
-        // เช็คว่าเคยล็อกอินไว้หรือยัง
+        // Login Logic
+        const ADMIN_PIN = "878556";
         if (sessionStorage.getItem('adminAuth') === 'true') grantAccess();
-
         document.getElementById('loginBtn').addEventListener('click', () => {
-            const input = document.getElementById('pinInput').value;
-            if (input === ADMIN_PIN) {
+            if (document.getElementById('pinInput').value === ADMIN_PIN) {
                 sessionStorage.setItem('adminAuth', 'true');
                 grantAccess();
-            } else {
-                alert("รหัสผ่านไม่ถูกต้อง!");
-                document.getElementById('pinInput').value = "";
             }
         });
-
         function grantAccess() {
             document.getElementById('loginOverlay').classList.add('hidden');
             document.getElementById('adminContent').classList.remove('hidden');
         }
 
-        // --- 2. ระบบจัดการรูปภาพ (Gallery) ---
-        const gallery = document.getElementById('gallery');
-        const q = query(collection(db, "photos"), orderBy("timestamp", "desc"));
+        // --- ควบคุมโหมดการแสดงผล ---
+        const modeStatus = document.getElementById('currentModeStatus');
+        
+        // อ่านค่าปัจจุบันจาก Firebase
+        onSnapshot(doc(db, "display", "config"), (docSnap) => {
+            if (docSnap.exists()) {
+                const mode = docSnap.data().mode;
+                modeStatus.innerText = `สถานะปัจจุบัน: โหมดสุ่ม${mode === 'latest' ? ' 10 ภาพล่าสุด' : 'ภาพทั้งหมด'}`;
+                // Highlight ปุ่ม
+                document.getElementById('setModeLatest').className = mode === 'latest' ? 'flex-1 bg-blue-600 py-4 rounded-xl font-bold' : 'flex-1 bg-gray-700 py-4 rounded-xl font-bold';
+                document.getElementById('setModeAll').className = mode === 'all' ? 'flex-1 bg-blue-600 py-4 rounded-xl font-bold' : 'flex-1 bg-gray-700 py-4 rounded-xl font-bold';
+            }
+        });
 
-        onSnapshot(q, (snapshot) => {
+        document.getElementById('setModeLatest').onclick = () => setDoc(doc(db, "display", "config"), { mode: 'latest' });
+        document.getElementById('setModeAll').onclick = () => setDoc(doc(db, "display", "config"), { mode: 'all' });
+
+        // Gallery & Management Logic (เหมือนเดิม)
+        const gallery = document.getElementById('gallery');
+        onSnapshot(query(collection(db, "photos"), orderBy("timestamp", "desc")), (snapshot) => {
             gallery.innerHTML = '';
             snapshot.forEach((docSnap) => {
                 const data = docSnap.data();
-                const docId = docSnap.id;
-                
                 const card = document.createElement('div');
-                card.className = "bg-gray-800 rounded-xl overflow-hidden shadow-lg border border-gray-700 flex flex-col";
+                card.className = "bg-gray-800 rounded-xl overflow-hidden border border-gray-700";
                 card.innerHTML = `
-                    <div class="h-48 overflow-hidden bg-black">
-                        <img src="${data.url}" class="w-full h-full object-cover">
-                    </div>
-                    <div class="p-2 grid grid-cols-1 gap-2">
-                        <button class="bg-green-600 hover:bg-green-500 text-white py-2 rounded font-bold text-xs send-btn" data-url="${data.url}">
-                            บังคับขึ้นจอทันที
-                        </button>
-                        <button class="bg-red-600 hover:bg-red-500 text-white py-3 rounded font-bold text-sm flex items-center justify-center gap-1 delete-btn" data-id="${docId}">
-                            <span>✖</span> ลบภาพนี้
-                        </button>
+                    <div class="h-40 bg-black"><img src="${data.url}" class="w-full h-full object-cover"></div>
+                    <div class="p-2 grid gap-2">
+                        <button class="bg-green-600 text-white py-1 rounded text-xs send-btn" data-url="${data.url}">ขึ้นจอทันที</button>
+                        <button class="bg-red-600 text-white py-1 rounded text-xs delete-btn" data-id="${docSnap.id}">ลบ</button>
                     </div>
                 `;
                 gallery.appendChild(card);
             });
 
-            // ฟังก์ชัน: บังคับภาพขึ้นจอ (Manual Override)
-            document.querySelectorAll('.send-btn').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
-                    const url = e.currentTarget.getAttribute('data-url');
-                    try {
-                        await setDoc(doc(db, "display", "main"), { 
-                            currentImageUrl: url, 
-                            time: Date.now() 
-                        });
-                        alert("ส่งรูปขึ้นจอแล้ว!");
-                    } catch (err) {
-                        console.error(err);
-                    }
-                });
-            });
-
-            // ฟังก์ชัน: ลบเฉพาะภาพที่เลือก
-            document.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
-                    const id = e.currentTarget.getAttribute('data-id');
-                    if (confirm("คุณแน่ใจหรือไม่ว่าต้องการลบรูปภาพนี้?")) {
-                        await deleteDoc(doc(db, "photos", id));
-                    }
-                });
-            });
+            document.querySelectorAll('.send-btn').forEach(btn => btn.onclick = (e) => setDoc(doc(db, "display", "main"), { currentImageUrl: e.target.dataset.url, time: Date.now() }));
+            document.querySelectorAll('.delete-btn').forEach(btn => btn.onclick = (e) => confirm("ลบรูปนี้?") && deleteDoc(doc(db, "photos", e.target.dataset.id)));
         });
 
-        // --- 3. ระบบล้างฐานข้อมูลทั้งหมด (Double Confirmation) ---
-        document.getElementById('clearAllBtn').addEventListener('click', async () => {
-            const confirmFirst = confirm("⚠️ คำเตือน: คุณกำลังจะลบรูปภาพ 'ทั้งหมด' ในระบบ! ยืนยันรอบที่ 1?");
-            if (confirmFirst) {
-                const confirmSecond = confirm("กรุณายืนยันอีกครั้ง (รอบที่ 2) เพื่อลบข้อมูลถาวร?");
-                if (confirmSecond) {
-                    try {
-                        const snap = await getDocs(collection(db, "photos"));
-                        const deletePromises = snap.docs.map(d => deleteDoc(doc(db, "photos", d.id)));
-                        await Promise.all(deletePromises);
-                        alert("✅ ล้างรูปภาพทั้งหมดเรียบร้อยแล้ว");
-                    } catch (error) {
-                        console.error(error);
-                        alert("เกิดข้อผิดพลาดในการลบ");
-                    }
-                }
+        document.getElementById('clearAllBtn').onclick = async () => {
+            if (confirm("ยืนยันลบรูปทั้งหมด?") && confirm("ย้ำอีกครั้ง! ลบหมดเลยนะ?")) {
+                const snap = await getDocs(collection(db, "photos"));
+                snap.forEach(d => deleteDoc(doc(db, "photos", d.id)));
             }
-        });
+        };
     </script>
 </body>
 </html>
