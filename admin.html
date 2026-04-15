@@ -26,7 +26,7 @@
             <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                 <div>
                     <h1 class="text-3xl font-bold text-gray-800">จัดการคิวรูปภาพ ⚙️</h1>
-                    <p class="text-gray-500">จัดการรูปภาพที่ส่งมาจากผู้ใช้งาน</p>
+                    <p class="text-gray-500">ติ๊กเครื่องหมายถูกออกเพื่อลบภาพที่ไม่เหมาะสมออกจากระบบทันที</p>
                 </div>
                 
                 <button id="clearAllBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all active:scale-95">
@@ -55,15 +55,12 @@
         
         const ADMIN_PIN = "878556"; // รหัสผ่านของคุณ
 
-        // ตรวจสอบว่าเคย Login ผ่านแล้วหรือยังใน Session นี้
         if (sessionStorage.getItem('adminAuth') === 'true') {
             grantAccess();
         }
 
-        // กดปุ่มเพื่อ Login
         loginBtn.addEventListener('click', checkPin);
         
-        // กดปุ่ม Enter ในช่องพิมพ์รหัสเพื่อ Login ได้เลย
         pinInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') checkPin();
         });
@@ -74,14 +71,14 @@
                 grantAccess();
             } else {
                 loginError.classList.remove('hidden');
-                pinInput.value = ''; // ล้างช่องพิมพ์
+                pinInput.value = ''; 
                 pinInput.focus();
             }
         }
 
         function grantAccess() {
-            loginOverlay.classList.add('hidden'); // ซ่อนหน้า Login
-            adminContent.classList.remove('hidden'); // โชว์หน้า Admin
+            loginOverlay.classList.add('hidden'); 
+            adminContent.classList.remove('hidden'); 
         }
 
         // ==========================================
@@ -113,25 +110,28 @@
                 const docId = docSnap.id;
                 
                 const card = document.createElement('div');
-                card.className = "bg-white p-3 rounded-xl shadow-sm border border-gray-200 flex flex-col";
+                card.className = "bg-white p-3 rounded-xl shadow-sm border border-gray-200 flex flex-col transition-all duration-300";
+                
+                // ออกแบบการ์ดใหม่ ให้มี Checkbox สลับการแสดงผล
                 card.innerHTML = `
+                    <div class="flex items-center justify-between mb-2 px-1">
+                        <label class="flex items-center cursor-pointer select-none">
+                            <input type="checkbox" checked class="w-5 h-5 cursor-pointer accent-green-600 toggle-show-btn" data-id="${docId}">
+                            <span class="ml-2 text-sm font-bold text-green-700">อนุญาตให้แสดง</span>
+                        </label>
+                    </div>
                     <div class="relative group h-40 mb-3 overflow-hidden rounded-lg bg-gray-100">
                         <img src="${data.url}" class="w-full h-full object-cover">
                     </div>
-                    <div class="space-y-2">
-                        <button class="bg-green-500 hover:bg-green-600 text-white w-full py-2 rounded-md font-bold text-sm transition send-btn" 
-                                data-url="${data.url}">
-                            ส่งขึ้นจอ
-                        </button>
-                        <button class="bg-gray-100 hover:bg-red-100 hover:text-red-600 text-gray-500 w-full py-2 rounded-md font-medium text-xs transition delete-btn" 
-                                data-id="${docId}">
-                            ลบรูปนี้
-                        </button>
-                    </div>
+                    <button class="bg-blue-500 hover:bg-blue-600 text-white w-full py-2 rounded-md font-bold text-sm transition send-btn" 
+                            data-url="${data.url}">
+                        ส่งขึ้นจอทันที
+                    </button>
                 `;
                 gallery.appendChild(card);
             });
 
+            // ผูก Event ให้ปุ่ม "ส่งขึ้นจอทันที"
             document.querySelectorAll('.send-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     const url = e.target.getAttribute('data-url');
@@ -141,22 +141,35 @@
                             time: Date.now() 
                         });
                         e.target.innerText = "✅ ส่งแล้ว";
-                        setTimeout(() => e.target.innerText = "ส่งขึ้นจอ", 2000);
+                        setTimeout(() => e.target.innerText = "ส่งขึ้นจอทันที", 2000);
                     } catch (err) {
                         console.error(err);
                     }
                 });
             });
 
-            document.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
+            // ผูก Event ให้ Checkbox (สำหรับการคัดกรองอย่างรวดเร็ว)
+            document.querySelectorAll('.toggle-show-btn').forEach(checkbox => {
+                checkbox.addEventListener('change', async (e) => {
+                    const isChecked = e.target.checked;
                     const id = e.target.getAttribute('data-id');
-                    if (confirm("ยืนยันการลบรูปภาพนี้?")) {
+                    const cardElement = e.target.closest('.bg-white'); // หาตัวกรอบการ์ด
+
+                    if (!isChecked) {
+                        // ถ้าเอาติ๊กถูกออก (ไม่ให้แสดง) -> เปลี่ยนสีให้ดูจางลง และลบออกจากฐานข้อมูลทันที
+                        cardElement.style.opacity = '0.4';
+                        cardElement.style.pointerEvents = 'none'; // ปิดการกดซ้ำ
+                        
                         try {
                             await deleteDoc(doc(db, "photos", id));
+                            // เมื่อลบเสร็จ onSnapshot จะทำการรีเฟรชหน้าจอให้อัตโนมัติและรูปจะหายไป
                         } catch (err) {
                             console.error("Error deleting document: ", err);
-                            alert("ไม่สามารถลบรูปภาพได้");
+                            alert("ไม่สามารถลบรูปภาพได้ กรุณาลองใหม่");
+                            // ถ้าระบบ Error ให้คืนค่าการติ๊กถูกและสีกลับมาเหมือนเดิม
+                            e.target.checked = true;
+                            cardElement.style.opacity = '1';
+                            cardElement.style.pointerEvents = 'auto';
                         }
                     }
                 });
