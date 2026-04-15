@@ -6,19 +6,76 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        body { background-color: #000; overflow: hidden; margin: 0; font-family: sans-serif; }
-        #displayImg { width: 100vw; height: 100vh; object-fit: contain; transition: opacity 1s ease-in-out; }
+        body { 
+            background-color: #0a0a0a; 
+            overflow: hidden; 
+            margin: 0; 
+            font-family: 'sans-serif'; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        /* 1. จัดการกรอบภาพให้เป็นสัดส่วนเดียวกัน (เช่น 4:3 หรือ 1:1) */
+        .image-frame {
+            width: 80vw;
+            height: 70vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border-radius: 24px;
+            background: #1a1a1a;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            margin-top: 80px; /* เว้นที่ให้ QR Code ด้านบน */
+        }
+
+        #displayImg {
+            width: 100%;
+            height: 100%;
+            /* บังคับให้ภาพเต็มกรอบเสมอ ไม่ว่าจะเป็นแนวตั้งหรือแนวนอน */
+            object-fit: cover; 
+            transition: opacity 1s ease-in-out;
+        }
+
         .fade-out { opacity: 0; }
+
+        /* 2. จัดการ QR Code ไว้ตรงกลางด้านบน เทพื้นขาว */
+        .qr-header {
+            position: fixed;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 15px 30px;
+            border-radius: 0 0 40px 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            z-index: 100;
+        }
+        #qrcode { padding: 5px; }
+        .qr-text {
+            color: #333;
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-top: 8px;
+        }
     </style>
 </head>
-<body class="relative flex items-center justify-center">
+<body>
 
-    <div class="absolute top-6 z-20 flex flex-col items-center bg-white/90 p-3 rounded-2xl shadow-2xl">
+    <div class="qr-header">
         <div id="qrcode"></div>
-        <p class="font-bold mt-2 text-black text-sm">สแกนเพื่อส่งรูป</p>
+        <p class="qr-text">📸 สแกนเพื่อส่งรูปภาพ</p>
     </div>
 
-    <img id="displayImg" src="" alt="Screen">
+    <div class="image-frame">
+        <img id="displayImg" src="" alt="Screen">
+    </div>
 
     <script type="module">
         import { db } from './firebase-config.js';
@@ -30,12 +87,16 @@
         let slideInterval = null;
         let manualOverride = false;
 
+        // ตั้งค่า QR Code
         new QRCode(document.getElementById("qrcode"), {
-            text: "https://suchart28.github.io/photoup/",
-            width: 150, height: 150
+            text: "https://suchart28.github.io/photoup/", // เปลี่ยนเป็น URL ของคุณ
+            width: 120,
+            height: 120,
+            colorDark : "#000000",
+            colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.H
         });
 
-        // ฟังก์ชันสลับภาพ (ไม่ต้องรับค่า caption แล้ว)
         function showImage(url) {
             if (displayImg.src === url) return;
             displayImg.classList.add('fade-out');
@@ -53,7 +114,7 @@
                     showImage(p.url);
                     currentIndex = (currentIndex + 1) % latestPhotos.length;
                 }
-            }, 6000);
+            }, 5000);
         }
 
         const q = query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(10));
@@ -68,7 +129,7 @@
                 manualOverride = true;
                 showImage(data.currentImageUrl);
                 clearTimeout(window.manualTimer);
-                window.manualTimer = setTimeout(() => { manualOverride = false; }, 15000); // โชว์ค้าง 15 วิ
+                window.manualTimer = setTimeout(() => { manualOverride = false; }, 15000);
             }
         });
     </script>
