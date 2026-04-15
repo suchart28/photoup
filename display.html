@@ -2,46 +2,49 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <title>Display Screen 16:9 - Random Mode</title>
+    <title>Display Screen 16:9 - MAX SIZE</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         body { 
-            background-color: #050505; 
-            overflow: hidden; margin: 0; height: 100vh; width: 100vw;
-            display: flex; align-items: center; justify-content: center; font-family: sans-serif;
+            background-color: #000; overflow: hidden; margin: 0; 
+            height: 100vh; width: 100vw; display: flex; align-items: center; justify-content: center;
         }
-        .main-container { display: flex; align-items: center; justify-content: space-around; width: 95%; height: 85%; }
-        .image-frame {
-            height: 80vh; aspect-ratio: 1 / 1; overflow: hidden;
-            border-radius: 30px; border: 8px solid #ffffff;
-            box-shadow: 0 0 50px rgba(0,0,0,0.8); background: #111;
-        }
-        #displayImg { width: 100%; height: 100%; object-fit: cover; transition: opacity 1s ease-in-out; }
-        .qr-side { background: white; padding: 20px; border-radius: 20px; text-align: center; }
-        .qr-label { color: #333; font-weight: bold; margin-top: 10px; font-size: 1.2rem; }
-        .fade-out { opacity: 0; }
 
-        /* ส่วนควบคุมโหมดการสุ่ม (มุมซ้ายล่าง) */
-        .mode-controls {
-            position: fixed; bottom: 20px; left: 20px; display: flex; gap: 10px; opacity: 0.3; transition: opacity 0.3s;
+        .main-container {
+            display: flex; align-items: center; justify-content: space-between;
+            width: 100%; height: 100%; padding: 0 20px;
         }
-        .mode-controls:hover { opacity: 1; }
-        .btn-mode { background: rgba(255,255,255,0.2); color: white; padding: 8px 15px; border-radius: 10px; font-size: 12px; cursor: pointer; border: 1px solid white; }
-        .btn-mode.active { background: #3b82f6; border-color: #3b82f6; }
+
+        /* 2. ขยายภาพสี่เหลี่ยมจัตุรัสให้เกือบเต็มความสูงจอ */
+        .image-frame {
+            height: 96vh; /* ขยายเกือบเต็มความสูงจอ */
+            aspect-ratio: 1 / 1; 
+            overflow: hidden;
+            border-radius: 20px;
+            border: 10px solid #fff;
+            box-shadow: 0 0 100px rgba(255,255,255,0.2);
+            background: #111;
+        }
+
+        #displayImg { width: 100%; height: 100%; object-fit: cover; transition: opacity 0.8s ease-in-out; }
+
+        /* 2. ขยาย QR Code ให้ใหญ่ขึ้น */
+        .qr-side {
+            background: white; padding: 25px; border-radius: 30px; text-align: center;
+            flex-shrink: 0; margin: 0 10px;
+        }
+
+        .qr-label { color: #000; font-weight: 900; margin-top: 15px; font-size: 1.8rem; }
+        .fade-out { opacity: 0; }
     </style>
 </head>
 <body>
 
-    <div class="mode-controls">
-        <button id="modeLatest" class="btn-mode active">สุ่ม 10 ภาพล่าสุด</button>
-        <button id="modeAll" class="btn-mode">สุ่มภาพทั้งหมด</button>
-    </div>
-
     <div class="main-container">
         <div class="qr-side">
             <div id="qrcodeLeft"></div>
-            <p class="qr-label">Scan to Post</p>
+            <p class="qr-label">SCAN TO POST</p>
         </div>
 
         <div class="image-frame">
@@ -50,23 +53,23 @@
 
         <div class="qr-side">
             <div id="qrcodeRight"></div>
-            <p class="qr-label">Scan to Post</p>
+            <p class="qr-label">SCAN TO POST</p>
         </div>
     </div>
 
     <script type="module">
         import { db } from './firebase-config.js';
-        import { collection, query, orderBy, limit, onSnapshot, doc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+        import { collection, query, orderBy, limit, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
         const displayImg = document.getElementById('displayImg');
         const uploadUrl = "https://suchart28.github.io/photoup/"; 
         let currentPhotos = [];
         let slideInterval = null;
         let manualOverride = false;
-        let displayMode = 'latest'; // 'latest' หรือ 'all'
+        let currentMode = 'latest';
 
-        // สร้าง QR Code
-        const qrConfig = { text: uploadUrl, width: 180, height: 180 };
+        // สร้าง QR Code ขนาดใหญ่ (300px)
+        const qrConfig = { text: uploadUrl, width: 300, height: 300, colorDark: "#000", correctLevel: QRCode.CorrectLevel.H };
         new QRCode(document.getElementById("qrcodeLeft"), qrConfig);
         new QRCode(document.getElementById("qrcodeRight"), qrConfig);
 
@@ -76,69 +79,48 @@
             setTimeout(() => {
                 displayImg.src = url;
                 displayImg.onload = () => displayImg.classList.remove('fade-out');
-            }, 1000);
-        }
-
-        // ฟังก์ชันสุ่มภาพจาก Array
-        function pickRandomImage() {
-            if (currentPhotos.length > 0) {
-                const randomIndex = Math.floor(Math.random() * currentPhotos.length);
-                showImage(currentPhotos[randomIndex].url);
-            }
+            }, 800);
         }
 
         function startSlideshow() {
             if (slideInterval) clearInterval(slideInterval);
             slideInterval = setInterval(() => {
-                if (!manualOverride) pickRandomImage();
+                if (!manualOverride && currentPhotos.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * currentPhotos.length);
+                    showImage(currentPhotos[randomIndex].url);
+                }
             }, 5000);
         }
 
-        // ฟังการเปลี่ยนแปลงของข้อมูลตามโหมด
-        function updateListener() {
-            let q;
-            if (displayMode === 'latest') {
-                q = query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(10));
-            } else {
-                q = query(collection(db, "photos"), orderBy("timestamp", "desc"));
+        // ฟังคำสั่งเปลี่ยนโหมดจาก Admin
+        onSnapshot(doc(db, "display", "config"), (docSnap) => {
+            if (docSnap.exists()) {
+                currentMode = docSnap.data().mode;
+                updatePhotoListener();
             }
+        });
 
-            onSnapshot(q, (snapshot) => {
-                currentPhotos = snapshot.docs.map(doc => doc.data());
-                if (!manualOverride && currentPhotos.length > 0 && !slideInterval) {
-                    pickRandomImage();
-                    startSlideshow();
-                }
+        let photoUnsubscribe = null;
+        function updatePhotoListener() {
+            if (photoUnsubscribe) photoUnsubscribe();
+            
+            const q = currentMode === 'latest' 
+                ? query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(10))
+                : query(collection(db, "photos"), orderBy("timestamp", "desc"));
+
+            photoUnsubscribe = onSnapshot(q, (snapshot) => {
+                currentPhotos = snapshot.docs.map(d => d.data());
+                if (!manualOverride && !slideInterval) startSlideshow();
             });
         }
 
-        // เปลี่ยนโหมด
-        document.getElementById('modeLatest').onclick = (e) => {
-            displayMode = 'latest';
-            updateButtons(e.target);
-            updateListener();
-        };
-        document.getElementById('modeAll').onclick = (e) => {
-            displayMode = 'all';
-            updateButtons(e.target);
-            updateListener();
-        };
-
-        function updateButtons(activeBtn) {
-            document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
-            activeBtn.classList.add('active');
-        }
-
-        updateListener();
-
-        // รับคำสั่ง Force Display จาก Admin
+        // Force Display จาก Admin
         onSnapshot(doc(db, "display", "main"), (docSnap) => {
             if (docSnap.exists()) {
-                const data = docSnap.data();
                 manualOverride = true;
-                showImage(data.currentImageUrl);
+                showImage(docSnap.data().currentImageUrl);
                 clearTimeout(window.manualTimer);
-                window.manualTimer = setTimeout(() => { manualOverride = false; }, 15000);
+                window.manualTimer = setTimeout(() => manualOverride = false, 15000);
             }
         });
     </script>
