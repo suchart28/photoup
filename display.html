@@ -2,82 +2,136 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ส่งรูปภาพ</title>
+    <title>Display Screen 16:9</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body { 
+            background-color: #050505; 
+            overflow: hidden; 
+            margin: 0; 
+            height: 100vh; 
+            width: 100vw;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: sans-serif;
+        }
+
+        /* Container หลักจัดวางแบบ แถว (QR - Image - QR) */
+        .main-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            width: 95%;
+            height: 85%;
+        }
+
+        /* กรอบรูปสี่เหลี่ยมจัตุรัสตรงกลาง */
+        .image-frame {
+            height: 80vh; /* อิงความสูงหน้าจอเพื่อให้พอดี 16:9 */
+            aspect-ratio: 1 / 1; /* บังคับเป็นสี่เหลี่ยมจัตุรัส */
+            overflow: hidden;
+            border-radius: 30px;
+            border: 8px solid #ffffff;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            background: #111;
+        }
+
+        #displayImg {
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* ตัดภาพให้พอดีสี่เหลี่ยมโดยไม่เสียสัดส่วน */
+            transition: opacity 1s ease-in-out;
+        }
+
+        /* สไตล์ QR Code สองข้าง */
+        .qr-side {
+            background: white;
+            padding: 20px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .qr-label {
+            color: #333;
+            font-weight: bold;
+            margin-top: 10px;
+            font-size: 1.2rem;
+        }
+
+        .fade-out { opacity: 0; }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
-    <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-sm text-center">
-        <div class="text-5xl mb-4">📸</div>
-        <h1 class="text-2xl font-bold mb-6">ส่งรูปภาพร่วมสนุก</h1>
-        
-        <input type="file" id="photoInput" accept="image/*" class="hidden">
-        <button id="uploadBtn" disabled class="bg-gray-400 text-white font-bold py-4 px-8 rounded-full w-full shadow-lg transition-all">
-            รอสักครู่ (AI กำลังโหลด...)
-        </button>
-        
-        <p id="status" class="mt-6 text-sm text-gray-500">กรุณาอัปโหลดเฉพาะภาพถ่ายคนเท่านั้น</p>
+<body>
+
+    <div class="main-container">
+        <div class="qr-side">
+            <div id="qrcodeLeft"></div>
+            <p class="qr-label">Scan to Post</p>
+        </div>
+
+        <div class="image-frame">
+            <img id="displayImg" src="" alt="Screen">
+        </div>
+
+        <div class="qr-side">
+            <div id="qrcodeRight"></div>
+            <p class="qr-label">Scan to Post</p>
+        </div>
     </div>
 
     <script type="module">
         import { db } from './firebase-config.js';
-        import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+        import { collection, query, orderBy, limit, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
-        const photoInput = document.getElementById('photoInput');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const statusTxt = document.getElementById('status');
-        let aiModel = null;
+        const displayImg = document.getElementById('displayImg');
+        const uploadUrl = "https://suchart28.github.io/photoup/"; // URL ของคุณ
+        let latestPhotos = [];
+        let currentIndex = 0;
+        let slideInterval = null;
+        let manualOverride = false;
 
-        cocoSsd.load().then(model => {
-            aiModel = model;
-            uploadBtn.disabled = false;
-            uploadBtn.innerText = "ถ่ายรูป / เลือกรูป";
-            uploadBtn.className = "bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-full w-full shadow-lg transition-all active:scale-95";
+        // สร้าง QR Code ทั้งสองฝั่ง
+        const qrConfig = { text: uploadUrl, width: 180, height: 180 };
+        new QRCode(document.getElementById("qrcodeLeft"), qrConfig);
+        new QRCode(document.getElementById("qrcodeRight"), qrConfig);
+
+        function showImage(url) {
+            if (displayImg.src === url) return;
+            displayImg.classList.add('fade-out');
+            setTimeout(() => {
+                displayImg.src = url;
+                displayImg.onload = () => displayImg.classList.remove('fade-out');
+            }, 1000);
+        }
+
+        function startSlideshow() {
+            if (slideInterval) clearInterval(slideInterval);
+            slideInterval = setInterval(() => {
+                if (!manualOverride && latestPhotos.length > 0) {
+                    const p = latestPhotos[currentIndex];
+                    showImage(p.url);
+                    currentIndex = (currentIndex + 1) % latestPhotos.length;
+                }
+            }, 5000);
+        }
+
+        const q = query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(10));
+        onSnapshot(q, (snapshot) => {
+            latestPhotos = snapshot.docs.map(doc => doc.data());
+            if (!manualOverride && latestPhotos.length > 0 && !slideInterval) startSlideshow();
         });
 
-        uploadBtn.addEventListener('click', () => photoInput.click());
-
-        photoInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            statusTxt.innerText = "🤖 AI กำลังตรวจสอบภาพ...";
-            uploadBtn.disabled = true;
-
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = async (ev) => {
-                const img = new Image();
-                img.src = ev.target.result;
-                img.onload = async () => {
-                    const predictions = await aiModel.detect(img);
-                    const isPerson = predictions.some(p => p.class === 'person');
-
-                    if (!isPerson) {
-                        statusTxt.innerText = "❌ ตรวจไม่พบคนในภาพ กรุณาลองใหม่";
-                        statusTxt.className = "mt-6 text-sm text-red-500 font-bold";
-                        uploadBtn.disabled = false;
-                        return;
-                    }
-
-                    statusTxt.innerText = "⏳ กำลังอัปโหลด...";
-                    const compressed = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 1080 });
-                    const finalReader = new FileReader();
-                    finalReader.readAsDataURL(compressed);
-                    finalReader.onloadend = async () => {
-                        await addDoc(collection(db, "photos"), {
-                            url: finalReader.result,
-                            timestamp: serverTimestamp()
-                        });
-                        statusTxt.innerText = "✅ ส่งรูปภาพสำเร็จ!";
-                        statusTxt.className = "mt-6 text-sm text-green-500 font-bold";
-                        uploadBtn.disabled = false;
-                    };
-                };
-            };
+        onSnapshot(doc(db, "display", "main"), (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                manualOverride = true;
+                showImage(data.currentImageUrl);
+                clearTimeout(window.manualTimer);
+                window.manualTimer = setTimeout(() => { manualOverride = false; }, 15000);
+            }
         });
     </script>
 </body>
