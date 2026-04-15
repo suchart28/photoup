@@ -2,69 +2,41 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <title>Display Screen 16:9</title>
+    <title>Display Screen 16:9 - Random Mode</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         body { 
             background-color: #050505; 
-            overflow: hidden; 
-            margin: 0; 
-            height: 100vh; 
-            width: 100vw;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: sans-serif;
+            overflow: hidden; margin: 0; height: 100vh; width: 100vw;
+            display: flex; align-items: center; justify-content: center; font-family: sans-serif;
         }
-
-        /* Container หลักจัดวางแบบ แถว (QR - Image - QR) */
-        .main-container {
-            display: flex;
-            align-items: center;
-            justify-content: space-around;
-            width: 95%;
-            height: 85%;
-        }
-
-        /* กรอบรูปสี่เหลี่ยมจัตุรัสตรงกลาง */
+        .main-container { display: flex; align-items: center; justify-content: space-around; width: 95%; height: 85%; }
         .image-frame {
-            height: 80vh; /* อิงความสูงหน้าจอเพื่อให้พอดี 16:9 */
-            aspect-ratio: 1 / 1; /* บังคับเป็นสี่เหลี่ยมจัตุรัส */
-            overflow: hidden;
-            border-radius: 30px;
-            border: 8px solid #ffffff;
-            box-shadow: 0 0 50px rgba(0,0,0,0.8);
-            background: #111;
+            height: 80vh; aspect-ratio: 1 / 1; overflow: hidden;
+            border-radius: 30px; border: 8px solid #ffffff;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8); background: #111;
         }
-
-        #displayImg {
-            width: 100%;
-            height: 100%;
-            object-fit: cover; /* ตัดภาพให้พอดีสี่เหลี่ยมโดยไม่เสียสัดส่วน */
-            transition: opacity 1s ease-in-out;
-        }
-
-        /* สไตล์ QR Code สองข้าง */
-        .qr-side {
-            background: white;
-            padding: 20px;
-            border-radius: 20px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
-
-        .qr-label {
-            color: #333;
-            font-weight: bold;
-            margin-top: 10px;
-            font-size: 1.2rem;
-        }
-
+        #displayImg { width: 100%; height: 100%; object-fit: cover; transition: opacity 1s ease-in-out; }
+        .qr-side { background: white; padding: 20px; border-radius: 20px; text-align: center; }
+        .qr-label { color: #333; font-weight: bold; margin-top: 10px; font-size: 1.2rem; }
         .fade-out { opacity: 0; }
+
+        /* ส่วนควบคุมโหมดการสุ่ม (มุมซ้ายล่าง) */
+        .mode-controls {
+            position: fixed; bottom: 20px; left: 20px; display: flex; gap: 10px; opacity: 0.3; transition: opacity 0.3s;
+        }
+        .mode-controls:hover { opacity: 1; }
+        .btn-mode { background: rgba(255,255,255,0.2); color: white; padding: 8px 15px; border-radius: 10px; font-size: 12px; cursor: pointer; border: 1px solid white; }
+        .btn-mode.active { background: #3b82f6; border-color: #3b82f6; }
     </style>
 </head>
 <body>
+
+    <div class="mode-controls">
+        <button id="modeLatest" class="btn-mode active">สุ่ม 10 ภาพล่าสุด</button>
+        <button id="modeAll" class="btn-mode">สุ่มภาพทั้งหมด</button>
+    </div>
 
     <div class="main-container">
         <div class="qr-side">
@@ -84,16 +56,16 @@
 
     <script type="module">
         import { db } from './firebase-config.js';
-        import { collection, query, orderBy, limit, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+        import { collection, query, orderBy, limit, onSnapshot, doc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
         const displayImg = document.getElementById('displayImg');
-        const uploadUrl = "https://suchart28.github.io/photoup/"; // URL ของคุณ
-        let latestPhotos = [];
-        let currentIndex = 0;
+        const uploadUrl = "https://suchart28.github.io/photoup/"; 
+        let currentPhotos = [];
         let slideInterval = null;
         let manualOverride = false;
+        let displayMode = 'latest'; // 'latest' หรือ 'all'
 
-        // สร้าง QR Code ทั้งสองฝั่ง
+        // สร้าง QR Code
         const qrConfig = { text: uploadUrl, width: 180, height: 180 };
         new QRCode(document.getElementById("qrcodeLeft"), qrConfig);
         new QRCode(document.getElementById("qrcodeRight"), qrConfig);
@@ -107,23 +79,59 @@
             }, 1000);
         }
 
+        // ฟังก์ชันสุ่มภาพจาก Array
+        function pickRandomImage() {
+            if (currentPhotos.length > 0) {
+                const randomIndex = Math.floor(Math.random() * currentPhotos.length);
+                showImage(currentPhotos[randomIndex].url);
+            }
+        }
+
         function startSlideshow() {
             if (slideInterval) clearInterval(slideInterval);
             slideInterval = setInterval(() => {
-                if (!manualOverride && latestPhotos.length > 0) {
-                    const p = latestPhotos[currentIndex];
-                    showImage(p.url);
-                    currentIndex = (currentIndex + 1) % latestPhotos.length;
-                }
+                if (!manualOverride) pickRandomImage();
             }, 5000);
         }
 
-        const q = query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(10));
-        onSnapshot(q, (snapshot) => {
-            latestPhotos = snapshot.docs.map(doc => doc.data());
-            if (!manualOverride && latestPhotos.length > 0 && !slideInterval) startSlideshow();
-        });
+        // ฟังการเปลี่ยนแปลงของข้อมูลตามโหมด
+        function updateListener() {
+            let q;
+            if (displayMode === 'latest') {
+                q = query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(10));
+            } else {
+                q = query(collection(db, "photos"), orderBy("timestamp", "desc"));
+            }
 
+            onSnapshot(q, (snapshot) => {
+                currentPhotos = snapshot.docs.map(doc => doc.data());
+                if (!manualOverride && currentPhotos.length > 0 && !slideInterval) {
+                    pickRandomImage();
+                    startSlideshow();
+                }
+            });
+        }
+
+        // เปลี่ยนโหมด
+        document.getElementById('modeLatest').onclick = (e) => {
+            displayMode = 'latest';
+            updateButtons(e.target);
+            updateListener();
+        };
+        document.getElementById('modeAll').onclick = (e) => {
+            displayMode = 'all';
+            updateButtons(e.target);
+            updateListener();
+        };
+
+        function updateButtons(activeBtn) {
+            document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
+            activeBtn.classList.add('active');
+        }
+
+        updateListener();
+
+        // รับคำสั่ง Force Display จาก Admin
         onSnapshot(doc(db, "display", "main"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
