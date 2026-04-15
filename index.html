@@ -3,117 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ส่งรูปภาพร่วมสนุก</title>
+    <title>Admin - คัดกรองภาพ</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
-    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
-        <h1 class="text-2xl font-bold mb-6">📸 ส่งรูปขึ้นจอ</h1>
-        
-        <div class="mb-4 text-left">
-            <label class="block text-gray-700 text-sm font-bold mb-2">คำบรรยาย (Caption):</label>
-            <input type="text" id="captionInput" placeholder="พิมพ์ข้อความที่นี่..." 
-                   class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
-        </div>
+<body class="bg-gray-900 min-h-screen text-white relative">
 
-        <input type="file" id="photoInput" accept="image/*" class="hidden">
-        
-        <button id="uploadBtn" disabled class="bg-gray-400 text-white font-bold py-4 px-8 rounded-full w-full shadow-lg transition-all">
-            กำลังโหลดระบบตรวจจับ...
-        </button>
-        
-        <p id="status" class="mt-6 text-sm text-gray-600 min-h-[1.5rem]">ระบบกำลังเตรียมความพร้อม ⏳</p>
+    <div id="loginOverlay" class="fixed inset-0 bg-black flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">รหัสผ่านแอดมิน</h2>
+            <input type="password" id="pinInput" placeholder="รหัส 6 หลัก" maxlength="6" 
+                   class="w-full p-4 border-2 border-gray-200 rounded-xl mb-4 text-center text-2xl text-black">
+            <button id="loginBtn" class="bg-blue-600 w-full py-3 rounded-xl font-bold">เข้าสู่ระบบ</button>
+        </div>
+    </div>
+
+    <div id="adminContent" class="hidden p-6">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex justify-between items-end mb-8 border-b border-gray-700 pb-4">
+                <div>
+                    <h1 class="text-3xl font-bold text-blue-400">ระบบคัดกรองภาพ Real-time ⚡</h1>
+                    <p class="text-gray-400">ทุกภาพที่อัปโหลดจะ "แสดงผลทันที" หากพบภาพไม่เหมาะสมให้กดปุ่มสีแดงเพื่อลบ</p>
+                </div>
+                <button id="clearAllBtn" class="bg-red-900/50 hover:bg-red-600 text-red-200 px-4 py-2 rounded-lg text-sm border border-red-700">ล้างรูปทั้งหมด</button>
+            </div>
+
+            <div id="gallery" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            </div>
+        </div>
     </div>
 
     <script type="module">
         import { db } from './firebase-config.js';
-        import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+        import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
-        const photoInput = document.getElementById('photoInput');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const captionInput = document.getElementById('captionInput');
-        const statusTxt = document.getElementById('status');
-        
-        let aiModel = null;
+        // --- ระบบ Login ---
+        const ADMIN_PIN = "878556";
+        if (sessionStorage.getItem('adminAuth') === 'true') grantAccess();
+        document.getElementById('loginBtn').addEventListener('click', () => {
+            if (document.getElementById('pinInput').value === ADMIN_PIN) {
+                sessionStorage.setItem('adminAuth', 'true');
+                grantAccess();
+            }
+        });
+        function grantAccess() {
+            document.getElementById('loginOverlay').classList.add('hidden');
+            document.getElementById('adminContent').classList.remove('hidden');
+        }
 
-        // 1. โหลดโมเดล AI ทันทีที่เปิดหน้าเว็บ
-        cocoSsd.load().then(model => {
-            aiModel = model;
-            uploadBtn.disabled = false;
-            uploadBtn.classList.replace('bg-gray-400', 'bg-blue-600');
-            uploadBtn.classList.add('hover:bg-blue-700', 'active:scale-95');
-            uploadBtn.innerText = "เลือกรูปภาพ / ถ่ายรูป";
-            statusTxt.innerHTML = "พร้อมใช้งานแล้ว!";
-        }).catch(err => {
-            console.error("AI Load Error:", err);
-            statusTxt.innerHTML = "⚠️ ไม่สามารถโหลดระบบคัดกรองได้";
+        // --- ระบบคัดกรองภาพ ---
+        const gallery = document.getElementById('gallery');
+
+        const q = query(collection(db, "photos"), orderBy("timestamp", "desc"));
+        onSnapshot(q, (snapshot) => {
+            gallery.innerHTML = '';
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                const docId = docSnap.id;
+                
+                const card = document.createElement('div');
+                card.className = "bg-gray-800 rounded-xl overflow-hidden shadow-lg border border-gray-700 flex flex-col";
+                card.innerHTML = `
+                    <div class="h-40 overflow-hidden bg-black">
+                        <img src="${data.url}" class="w-full h-full object-cover">
+                    </div>
+                    <div class="p-2 grid grid-cols-1 gap-2">
+                        <button class="bg-green-600 hover:bg-green-500 text-white py-2 rounded font-bold text-xs send-btn" data-url="${data.url}">
+                            บังคับขึ้นจอทันที
+                        </button>
+                        <button class="bg-red-600 hover:bg-red-500 text-white py-3 rounded font-bold text-sm flex items-center justify-center gap-1 delete-btn" data-id="${docId}">
+                            <span>✖</span> ลบภาพนี้ (ไม่เหมาะสม)
+                        </button>
+                    </div>
+                `;
+                gallery.appendChild(card);
+            });
+
+            // ปุ่มส่งขึ้นจอ (Manual Override)
+            document.querySelectorAll('.send-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const url = e.currentTarget.getAttribute('data-url');
+                    await setDoc(doc(db, "display", "main"), { currentImageUrl: url, time: Date.now() });
+                });
+            });
+
+            // ปุ่มลบภาพ (คัดกรองออกรวดเร็ว)
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = e.currentTarget.getAttribute('data-id');
+                    // ลบทันทีโดยไม่ถาม confirm เพื่อความรวดเร็วในการคัดกรอง (หรือใส่ถ้ากลัวกดผิด)
+                    await deleteDoc(doc(db, "photos", id));
+                });
+            });
         });
 
-        uploadBtn.addEventListener('click', () => photoInput.click());
-
-        photoInput.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            statusTxt.innerHTML = "กำลังให้ AI ตรวจสอบรูปภาพ... 🤖";
-            statusTxt.className = "mt-6 text-sm text-blue-600 font-bold";
-            uploadBtn.disabled = true;
-
-            try {
-                // สร้างออบเจ็กต์รูปภาพจำลองเพื่อส่งให้ AI ตรวจ
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = async (event) => {
-                    const imgElement = new Image();
-                    imgElement.src = event.target.result;
-                    
-                    imgElement.onload = async () => {
-                        // 2. ให้ AI สแกนรูปภาพ
-                        const predictions = await aiModel.detect(imgElement);
-                        
-                        // ค้นหาว่าในรูปมีวัตถุประเภท "person" (คน) หรือไม่
-                        const hasPerson = predictions.some(prediction => prediction.class === 'person');
-
-                        if (!hasPerson) {
-                            // ถ้าไม่มีคนในรูป ให้แจ้งเตือนและหยุดการทำงาน
-                            statusTxt.innerHTML = "❌ กรุณาอัพโหลดเฉพาะภาพถ่ายคนเท่านั้น";
-                            statusTxt.className = "mt-6 text-sm text-red-600 font-bold";
-                            uploadBtn.disabled = false;
-                            return; 
-                        }
-
-                        // 3. ถ้าผ่านการตรวจสอบ (มีคน) ค่อยย่อขนาดและส่งขึ้น Firebase
-                        statusTxt.innerHTML = "ผ่าน! กำลังเตรียมรูปภาพ... ⏳";
-                        
-                        const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true };
-                        const compressedFile = await imageCompression(file, options);
-
-                        const compressReader = new FileReader();
-                        compressReader.readAsDataURL(compressedFile);
-                        compressReader.onloadend = async () => {
-                            const base64data = compressReader.result;
-                            
-                            await addDoc(collection(db, "photos"), {
-                                url: base64data,
-                                caption: captionInput.value || "",
-                                timestamp: serverTimestamp()
-                            });
-
-                            statusTxt.innerHTML = "✅ ส่งรูปภาพสำเร็จ!";
-                            statusTxt.className = "mt-6 text-sm text-green-600 font-bold";
-                            uploadBtn.disabled = false;
-                            captionInput.value = "";
-                        };
-                    };
-                };
-            } catch (error) {
-                console.error(error);
-                statusTxt.innerHTML = "❌ เกิดข้อผิดพลาดในการตรวจสอบ";
-                statusTxt.className = "mt-6 text-sm text-red-600 font-bold";
-                uploadBtn.disabled = false;
+        // ล้างฐานข้อมูลทั้งหมด
+        document.getElementById('clearAllBtn').addEventListener('click', async () => {
+            if (confirm("ลบรูปภาพทั้งหมด?")) {
+                const snap = await getDocs(collection(db, "photos"));
+                snap.forEach(d => deleteDoc(doc(db, "photos", d.id)));
             }
         });
     </script>
