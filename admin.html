@@ -3,40 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - จัดการระบบ</title>
+    <title>Admin - คัดกรองภาพ</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 min-h-screen relative">
+<body class="bg-gray-900 min-h-screen text-white relative">
 
-    <div id="loginOverlay" class="fixed inset-0 bg-gray-800 flex items-center justify-center z-50">
+    <div id="loginOverlay" class="fixed inset-0 bg-black flex items-center justify-center z-50">
         <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center">
-            <div class="text-4xl mb-4">🔒</div>
-            <h2 class="text-2xl font-bold mb-6 text-gray-800">สำหรับทีมงานเท่านั้น</h2>
-            <input type="password" id="pinInput" placeholder="xxxxxx" maxlength="6" 
-                   class="w-full p-4 border-2 border-gray-200 rounded-xl mb-4 text-center text-2xl tracking-[0.5em] focus:outline-none focus:border-blue-500 transition">
-            <button id="loginBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl w-full shadow-lg active:scale-95 transition-all text-lg">
-                เข้าสู่ระบบ
-            </button>
-            <p id="loginError" class="text-red-500 text-sm mt-4 font-medium hidden">❌ รหัสผ่านไม่ถูกต้อง ลองใหม่อีกครั้ง</p>
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">รหัสผ่านแอดมิน</h2>
+            <input type="password" id="pinInput" placeholder="รหัส 6 หลัก" maxlength="6" 
+                   class="w-full p-4 border-2 border-gray-200 rounded-xl mb-4 text-center text-2xl text-black">
+            <button id="loginBtn" class="bg-blue-600 w-full py-3 rounded-xl font-bold">เข้าสู่ระบบ</button>
         </div>
     </div>
 
     <div id="adminContent" class="hidden p-6">
-        <div class="max-w-6xl mx-auto">
-            <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex justify-between items-end mb-8 border-b border-gray-700 pb-4">
                 <div>
-                    <h1 class="text-3xl font-bold text-gray-800">จัดการคิวรูปภาพ ⚙️</h1>
-                    <p class="text-gray-500">ติ๊กเครื่องหมายถูกออกเพื่อลบภาพที่ไม่เหมาะสมออกจากระบบทันที</p>
+                    <h1 class="text-3xl font-bold text-blue-400">ระบบคัดกรองภาพ Real-time ⚡</h1>
+                    <p class="text-gray-400">ทุกภาพที่อัปโหลดจะ "แสดงผลทันที" หากพบภาพไม่เหมาะสมให้กดปุ่มสีแดงเพื่อลบ</p>
                 </div>
-                
-                <button id="clearAllBtn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg shadow-md transition-all active:scale-95">
-                    ล้างฐานข้อมูลทั้งหมด
-                </button>
+                <button id="clearAllBtn" class="bg-red-900/50 hover:bg-red-600 text-red-200 px-4 py-2 rounded-lg text-sm border border-red-700">ล้างรูปทั้งหมด</button>
             </div>
 
-            <div id="gallery" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-                <p class="text-gray-400 col-span-full text-center py-10">กำลังโหลดรูปภาพ...</p>
-            </div>
+            <div id="gallery" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                </div>
         </div>
     </div>
 
@@ -44,136 +36,72 @@
         import { db } from './firebase-config.js';
         import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
-        // ==========================================
-        // 1. ระบบจัดการ รหัสผ่าน (Login System)
-        // ==========================================
-        const loginOverlay = document.getElementById('loginOverlay');
-        const adminContent = document.getElementById('adminContent');
-        const pinInput = document.getElementById('pinInput');
-        const loginBtn = document.getElementById('loginBtn');
-        const loginError = document.getElementById('loginError');
-        
-        const ADMIN_PIN = "878556"; // รหัสผ่านของคุณ
-
-        if (sessionStorage.getItem('adminAuth') === 'true') {
-            grantAccess();
-        }
-
-        loginBtn.addEventListener('click', checkPin);
-        
-        pinInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') checkPin();
-        });
-
-        function checkPin() {
-            if (pinInput.value === ADMIN_PIN) {
+        // --- ระบบ Login ---
+        const ADMIN_PIN = "878556";
+        if (sessionStorage.getItem('adminAuth') === 'true') grantAccess();
+        document.getElementById('loginBtn').addEventListener('click', () => {
+            if (document.getElementById('pinInput').value === ADMIN_PIN) {
                 sessionStorage.setItem('adminAuth', 'true');
                 grantAccess();
-            } else {
-                loginError.classList.remove('hidden');
-                pinInput.value = ''; 
-                pinInput.focus();
-            }
-        }
-
-        function grantAccess() {
-            loginOverlay.classList.add('hidden'); 
-            adminContent.classList.remove('hidden'); 
-        }
-
-        // ==========================================
-        // 2. ระบบจัดการรูปภาพ (Admin System)
-        // ==========================================
-        const gallery = document.getElementById('gallery');
-        const clearAllBtn = document.getElementById('clearAllBtn');
-
-        clearAllBtn.addEventListener('click', async () => {
-            if (confirm("⚠️ คุณแน่ใจหรือไม่ที่จะลบรูปภาพ 'ทั้งหมด' ในระบบ?")) {
-                const querySnapshot = await getDocs(collection(db, "photos"));
-                const deletePromises = querySnapshot.docs.map(docSnap => deleteDoc(doc(db, "photos", docSnap.id)));
-                await Promise.all(deletePromises);
-                alert("ล้างข้อมูลทั้งหมดเรียบร้อยแล้ว");
             }
         });
+        function grantAccess() {
+            document.getElementById('loginOverlay').classList.add('hidden');
+            document.getElementById('adminContent').classList.remove('hidden');
+        }
+
+        // --- ระบบคัดกรองภาพ ---
+        const gallery = document.getElementById('gallery');
 
         const q = query(collection(db, "photos"), orderBy("timestamp", "desc"));
         onSnapshot(q, (snapshot) => {
             gallery.innerHTML = '';
-            
-            if (snapshot.empty) {
-                gallery.innerHTML = '<p class="text-gray-400 col-span-full text-center py-10">ยังไม่มีรูปภาพในระบบ</p>';
-                return;
-            }
-
             snapshot.forEach((docSnap) => {
                 const data = docSnap.data();
                 const docId = docSnap.id;
                 
                 const card = document.createElement('div');
-                card.className = "bg-white p-3 rounded-xl shadow-sm border border-gray-200 flex flex-col transition-all duration-300";
-                
-                // ออกแบบการ์ดใหม่ ให้มี Checkbox สลับการแสดงผล
+                card.className = "bg-gray-800 rounded-xl overflow-hidden shadow-lg border border-gray-700 flex flex-col";
                 card.innerHTML = `
-                    <div class="flex items-center justify-between mb-2 px-1">
-                        <label class="flex items-center cursor-pointer select-none">
-                            <input type="checkbox" checked class="w-5 h-5 cursor-pointer accent-green-600 toggle-show-btn" data-id="${docId}">
-                            <span class="ml-2 text-sm font-bold text-green-700">อนุญาตให้แสดง</span>
-                        </label>
-                    </div>
-                    <div class="relative group h-40 mb-3 overflow-hidden rounded-lg bg-gray-100">
+                    <div class="h-40 overflow-hidden bg-black">
                         <img src="${data.url}" class="w-full h-full object-cover">
                     </div>
-                    <button class="bg-blue-500 hover:bg-blue-600 text-white w-full py-2 rounded-md font-bold text-sm transition send-btn" 
-                            data-url="${data.url}">
-                        ส่งขึ้นจอทันที
-                    </button>
+                    <div class="p-2 grid grid-cols-1 gap-2">
+                        <button class="bg-green-600 hover:bg-green-500 text-white py-2 rounded font-bold text-xs send-btn" data-url="${data.url}">
+                            บังคับขึ้นจอทันที
+                        </button>
+                        <button class="bg-red-600 hover:bg-red-500 text-white py-3 rounded font-bold text-sm flex items-center justify-center gap-1 delete-btn" data-id="${docId}">
+                            <span>✖</span> ลบภาพนี้ (ไม่เหมาะสม)
+                        </button>
+                    </div>
                 `;
                 gallery.appendChild(card);
             });
 
-            // ผูก Event ให้ปุ่ม "ส่งขึ้นจอทันที"
+            // ปุ่มส่งขึ้นจอ (Manual Override)
             document.querySelectorAll('.send-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
-                    const url = e.target.getAttribute('data-url');
-                    try {
-                        await setDoc(doc(db, "display", "main"), { 
-                            currentImageUrl: url, 
-                            time: Date.now() 
-                        });
-                        e.target.innerText = "✅ ส่งแล้ว";
-                        setTimeout(() => e.target.innerText = "ส่งขึ้นจอทันที", 2000);
-                    } catch (err) {
-                        console.error(err);
-                    }
+                    const url = e.currentTarget.getAttribute('data-url');
+                    await setDoc(doc(db, "display", "main"), { currentImageUrl: url, time: Date.now() });
                 });
             });
 
-            // ผูก Event ให้ Checkbox (สำหรับการคัดกรองอย่างรวดเร็ว)
-            document.querySelectorAll('.toggle-show-btn').forEach(checkbox => {
-                checkbox.addEventListener('change', async (e) => {
-                    const isChecked = e.target.checked;
-                    const id = e.target.getAttribute('data-id');
-                    const cardElement = e.target.closest('.bg-white'); // หาตัวกรอบการ์ด
-
-                    if (!isChecked) {
-                        // ถ้าเอาติ๊กถูกออก (ไม่ให้แสดง) -> เปลี่ยนสีให้ดูจางลง และลบออกจากฐานข้อมูลทันที
-                        cardElement.style.opacity = '0.4';
-                        cardElement.style.pointerEvents = 'none'; // ปิดการกดซ้ำ
-                        
-                        try {
-                            await deleteDoc(doc(db, "photos", id));
-                            // เมื่อลบเสร็จ onSnapshot จะทำการรีเฟรชหน้าจอให้อัตโนมัติและรูปจะหายไป
-                        } catch (err) {
-                            console.error("Error deleting document: ", err);
-                            alert("ไม่สามารถลบรูปภาพได้ กรุณาลองใหม่");
-                            // ถ้าระบบ Error ให้คืนค่าการติ๊กถูกและสีกลับมาเหมือนเดิม
-                            e.target.checked = true;
-                            cardElement.style.opacity = '1';
-                            cardElement.style.pointerEvents = 'auto';
-                        }
-                    }
+            // ปุ่มลบภาพ (คัดกรองออกรวดเร็ว)
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const id = e.currentTarget.getAttribute('data-id');
+                    // ลบทันทีโดยไม่ถาม confirm เพื่อความรวดเร็วในการคัดกรอง (หรือใส่ถ้ากลัวกดผิด)
+                    await deleteDoc(doc(db, "photos", id));
                 });
             });
+        });
+
+        // ล้างฐานข้อมูลทั้งหมด
+        document.getElementById('clearAllBtn').addEventListener('click', async () => {
+            if (confirm("ลบรูปภาพทั้งหมด?")) {
+                const snap = await getDocs(collection(db, "photos"));
+                snap.forEach(d => deleteDoc(doc(db, "photos", d.id)));
+            }
         });
     </script>
 </body>
