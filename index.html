@@ -3,23 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>อัปโหลดรูปภาพร่วมสนุก</title>
+    <title>ส่งรูปภาพร่วมสนุก</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 </head>
-<body class="bg-gray-100 h-screen flex flex-col items-center justify-center p-4">
-
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
     <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
-        <div class="text-6xl mb-4">📸</div>
-        <h1 class="text-2xl font-bold mb-2">ส่งรูปขึ้นจอ</h1>
-        <p class="mb-8 text-gray-500">เลือกรูปภาพหรือถ่ายรูปเพื่อแสดงบนเวที</p>
+        <h1 class="text-2xl font-bold mb-6">📸 ส่งรูปขึ้นจอ</h1>
         
+        <div class="mb-4 text-left">
+            <label class="block text-gray-700 text-sm font-bold mb-2">คำบรรยาย (Caption):</label>
+            <input type="text" id="captionInput" placeholder="พิมพ์ข้อความที่นี่..." 
+                   class="w-full p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+
         <input type="file" id="photoInput" accept="image/*" class="hidden">
-        <button id="uploadBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-full w-full shadow-lg active:scale-95 transition-all text-lg">
-            ถ่ายรูป / เลือกรูปภาพ
+        
+        <button id="uploadBtn" disabled class="bg-gray-400 text-white font-bold py-4 px-8 rounded-full w-full shadow-lg transition-all">
+            กำลังโหลดระบบตรวจจับ...
         </button>
         
-        <p id="status" class="mt-6 text-sm text-gray-600 min-h-[1.25rem]"></p>
+        <p id="status" class="mt-6 text-sm text-gray-600 min-h-[1.5rem]">ระบบกำลังเตรียมความพร้อม ⏳</p>
     </div>
 
     <script type="module">
@@ -28,7 +34,23 @@
 
         const photoInput = document.getElementById('photoInput');
         const uploadBtn = document.getElementById('uploadBtn');
+        const captionInput = document.getElementById('captionInput');
         const statusTxt = document.getElementById('status');
+        
+        let aiModel = null;
+
+        // 1. โหลดโมเดล AI ทันทีที่เปิดหน้าเว็บ
+        cocoSsd.load().then(model => {
+            aiModel = model;
+            uploadBtn.disabled = false;
+            uploadBtn.classList.replace('bg-gray-400', 'bg-blue-600');
+            uploadBtn.classList.add('hover:bg-blue-700', 'active:scale-95');
+            uploadBtn.innerText = "เลือกรูปภาพ / ถ่ายรูป";
+            statusTxt.innerHTML = "พร้อมใช้งานแล้ว!";
+        }).catch(err => {
+            console.error("AI Load Error:", err);
+            statusTxt.innerHTML = "⚠️ ไม่สามารถโหลดระบบคัดกรองได้";
+        });
 
         uploadBtn.addEventListener('click', () => photoInput.click());
 
@@ -36,30 +58,60 @@
             const file = e.target.files[0];
             if (!file) return;
 
-            statusTxt.innerHTML = "กำลังเตรียมรูปภาพ... ⏳";
+            statusTxt.innerHTML = "กำลังให้ AI ตรวจสอบรูปภาพ... 🤖";
             statusTxt.className = "mt-6 text-sm text-blue-600 font-bold";
             uploadBtn.disabled = true;
 
             try {
-                const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true };
-                const compressedFile = await imageCompression(file, options);
-
+                // สร้างออบเจ็กต์รูปภาพจำลองเพื่อส่งให้ AI ตรวจ
                 const reader = new FileReader();
-                reader.readAsDataURL(compressedFile);
-                reader.onloadend = async () => {
-                    const base64data = reader.result;
-                    await addDoc(collection(db, "photos"), {
-                        url: base64data,
-                        timestamp: serverTimestamp()
-                    });
+                reader.readAsDataURL(file);
+                reader.onload = async (event) => {
+                    const imgElement = new Image();
+                    imgElement.src = event.target.result;
+                    
+                    imgElement.onload = async () => {
+                        // 2. ให้ AI สแกนรูปภาพ
+                        const predictions = await aiModel.detect(imgElement);
+                        
+                        // ค้นหาว่าในรูปมีวัตถุประเภท "person" (คน) หรือไม่
+                        const hasPerson = predictions.some(prediction => prediction.class === 'person');
 
-                    statusTxt.innerHTML = "✅ ส่งรูปภาพสำเร็จ!";
-                    statusTxt.className = "mt-6 text-sm text-green-600 font-bold";
-                    uploadBtn.disabled = false;
-                    photoInput.value = ""; // Reset input
+                        if (!hasPerson) {
+                            // ถ้าไม่มีคนในรูป ให้แจ้งเตือนและหยุดการทำงาน
+                            statusTxt.innerHTML = "❌ กรุณาอัพโหลดเฉพาะภาพถ่ายคนเท่านั้น";
+                            statusTxt.className = "mt-6 text-sm text-red-600 font-bold";
+                            uploadBtn.disabled = false;
+                            return; 
+                        }
+
+                        // 3. ถ้าผ่านการตรวจสอบ (มีคน) ค่อยย่อขนาดและส่งขึ้น Firebase
+                        statusTxt.innerHTML = "ผ่าน! กำลังเตรียมรูปภาพ... ⏳";
+                        
+                        const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true };
+                        const compressedFile = await imageCompression(file, options);
+
+                        const compressReader = new FileReader();
+                        compressReader.readAsDataURL(compressedFile);
+                        compressReader.onloadend = async () => {
+                            const base64data = compressReader.result;
+                            
+                            await addDoc(collection(db, "photos"), {
+                                url: base64data,
+                                caption: captionInput.value || "",
+                                timestamp: serverTimestamp()
+                            });
+
+                            statusTxt.innerHTML = "✅ ส่งรูปภาพสำเร็จ!";
+                            statusTxt.className = "mt-6 text-sm text-green-600 font-bold";
+                            uploadBtn.disabled = false;
+                            captionInput.value = "";
+                        };
+                    };
                 };
             } catch (error) {
-                statusTxt.innerHTML = "❌ เกิดข้อผิดพลาด";
+                console.error(error);
+                statusTxt.innerHTML = "❌ เกิดข้อผิดพลาดในการตรวจสอบ";
                 statusTxt.className = "mt-6 text-sm text-red-600 font-bold";
                 uploadBtn.disabled = false;
             }
