@@ -3,23 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ส่งรูปภาพร่วมสนุก</title>
+    <title>ส่งรูปภาพ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
-    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center">
-        <h1 class="text-2xl font-bold mb-6">📸 ส่งรูปขึ้นจอ</h1>
-
-        <input type="file" id="photoInput" accept="image/*" class="hidden">
+    <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-sm text-center">
+        <div class="text-5xl mb-4">📸</div>
+        <h1 class="text-2xl font-bold mb-6">ส่งรูปภาพร่วมสนุก</h1>
         
+        <input type="file" id="photoInput" accept="image/*" class="hidden">
         <button id="uploadBtn" disabled class="bg-gray-400 text-white font-bold py-4 px-8 rounded-full w-full shadow-lg transition-all">
-            กำลังโหลดระบบตรวจจับ...
+            รอสักครู่ (AI กำลังโหลด...)
         </button>
         
-        <p id="status" class="mt-6 text-sm text-gray-600 min-h-[1.5rem]">ระบบกำลังเตรียมความพร้อม ⏳</p>
+        <p id="status" class="mt-6 text-sm text-gray-500">กรุณาอัปโหลดเฉพาะภาพถ่ายคนเท่านั้น</p>
     </div>
 
     <script type="module">
@@ -29,20 +29,13 @@
         const photoInput = document.getElementById('photoInput');
         const uploadBtn = document.getElementById('uploadBtn');
         const statusTxt = document.getElementById('status');
-        
         let aiModel = null;
 
-        // โหลด AI
         cocoSsd.load().then(model => {
             aiModel = model;
             uploadBtn.disabled = false;
-            uploadBtn.classList.replace('bg-gray-400', 'bg-blue-600');
-            uploadBtn.classList.add('hover:bg-blue-700', 'active:scale-95');
-            uploadBtn.innerText = "เลือกรูปภาพ / ถ่ายรูป";
-            statusTxt.innerHTML = "พร้อมใช้งานแล้ว!";
-        }).catch(err => {
-            console.error("AI Load Error:", err);
-            statusTxt.innerHTML = "⚠️ ไม่สามารถโหลดระบบคัดกรองได้";
+            uploadBtn.innerText = "ถ่ายรูป / เลือกรูป";
+            uploadBtn.className = "bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-full w-full shadow-lg transition-all active:scale-95";
         });
 
         uploadBtn.addEventListener('click', () => photoInput.click());
@@ -51,56 +44,40 @@
             const file = e.target.files[0];
             if (!file) return;
 
-            statusTxt.innerHTML = "กำลังให้ AI ตรวจสอบรูปภาพ... 🤖";
-            statusTxt.className = "mt-6 text-sm text-blue-600 font-bold";
+            statusTxt.innerText = "🤖 AI กำลังตรวจสอบภาพ...";
             uploadBtn.disabled = true;
 
-            try {
-                const reader = new FileReader();
-                reader.readAsDataURL(file);
-                reader.onload = async (event) => {
-                    const imgElement = new Image();
-                    imgElement.src = event.target.result;
-                    
-                    imgElement.onload = async () => {
-                        const predictions = await aiModel.detect(imgElement);
-                        const hasPerson = predictions.some(prediction => prediction.class === 'person');
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async (ev) => {
+                const img = new Image();
+                img.src = ev.target.result;
+                img.onload = async () => {
+                    const predictions = await aiModel.detect(img);
+                    const isPerson = predictions.some(p => p.class === 'person');
 
-                        if (!hasPerson) {
-                            statusTxt.innerHTML = "❌ กรุณาอัพโหลดเฉพาะภาพถ่ายคนเท่านั้น";
-                            statusTxt.className = "mt-6 text-sm text-red-600 font-bold";
-                            uploadBtn.disabled = false;
-                            return; 
-                        }
+                    if (!isPerson) {
+                        statusTxt.innerText = "❌ ตรวจไม่พบคนในภาพ กรุณาลองใหม่";
+                        statusTxt.className = "mt-6 text-sm text-red-500 font-bold";
+                        uploadBtn.disabled = false;
+                        return;
+                    }
 
-                        statusTxt.innerHTML = "ผ่าน! กำลังเตรียมรูปภาพ... ⏳";
-                        
-                        const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true };
-                        const compressedFile = await imageCompression(file, options);
-
-                        const compressReader = new FileReader();
-                        compressReader.readAsDataURL(compressedFile);
-                        compressReader.onloadend = async () => {
-                            const base64data = compressReader.result;
-                            
-                            // ส่งข้อมูลโดยไม่มี Caption
-                            await addDoc(collection(db, "photos"), {
-                                url: base64data,
-                                timestamp: serverTimestamp()
-                            });
-
-                            statusTxt.innerHTML = "✅ ส่งรูปภาพสำเร็จ!";
-                            statusTxt.className = "mt-6 text-sm text-green-600 font-bold";
-                            uploadBtn.disabled = false;
-                        };
+                    statusTxt.innerText = "⏳ กำลังอัปโหลด...";
+                    const compressed = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 1080 });
+                    const finalReader = new FileReader();
+                    finalReader.readAsDataURL(compressed);
+                    finalReader.onloadend = async () => {
+                        await addDoc(collection(db, "photos"), {
+                            url: finalReader.result,
+                            timestamp: serverTimestamp()
+                        });
+                        statusTxt.innerText = "✅ ส่งรูปภาพสำเร็จ!";
+                        statusTxt.className = "mt-6 text-sm text-green-500 font-bold";
+                        uploadBtn.disabled = false;
                     };
                 };
-            } catch (error) {
-                console.error(error);
-                statusTxt.innerHTML = "❌ เกิดข้อผิดพลาดในการตรวจสอบ";
-                statusTxt.className = "mt-6 text-sm text-red-600 font-bold";
-                uploadBtn.disabled = false;
-            }
+            };
         });
     </script>
 </body>
