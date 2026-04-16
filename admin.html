@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - ระบบจัดการรูปภาพ</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* เอฟเฟกต์โผล่ขึ้นมานุ่มๆ สำหรับรูปใหม่ */
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+    </style>
 </head>
 <body class="bg-gray-900 min-h-screen text-white">
 
@@ -23,7 +28,7 @@
             <div class="flex flex-col md:flex-row justify-between items-center mb-6 border-b border-gray-700 pb-6 gap-4">
                 <div>
                     <h1 class="text-3xl font-bold text-blue-400">Admin Control Center ⚡</h1>
-                    <p class="text-gray-400">จัดการการแสดงผลและคัดกรองรูปภาพ</p>
+                    <p class="text-gray-400">โหลดภาพด้วยระบบ Lazy Load (เร็วและประหยัดเน็ต)</p>
                 </div>
                 <button id="clearAllBtn" class="bg-red-900/50 hover:bg-red-600 text-red-200 px-6 py-3 rounded-xl font-bold border border-red-700">
                     🗑️ ล้างรูปทั้งหมดในระบบ
@@ -49,7 +54,7 @@
 
     <script type="module">
         import { db } from './firebase-config.js';
-        import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+        import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
         // Login Logic
         const ADMIN_PIN = "878556";
@@ -65,15 +70,12 @@
             document.getElementById('adminContent').classList.remove('hidden');
         }
 
-        // --- ควบคุมโหมดการแสดงผล ---
+        // โหมดการแสดงผล
         const modeStatus = document.getElementById('currentModeStatus');
-        
-        // อ่านค่าปัจจุบันจาก Firebase
         onSnapshot(doc(db, "display", "config"), (docSnap) => {
             if (docSnap.exists()) {
                 const mode = docSnap.data().mode;
                 modeStatus.innerText = `สถานะปัจจุบัน: โหมดสุ่ม${mode === 'latest' ? ' 10 ภาพล่าสุด' : 'ภาพทั้งหมด'}`;
-                // Highlight ปุ่ม
                 document.getElementById('setModeLatest').className = mode === 'latest' ? 'flex-1 bg-blue-600 py-4 rounded-xl font-bold' : 'flex-1 bg-gray-700 py-4 rounded-xl font-bold';
                 document.getElementById('setModeAll').className = mode === 'all' ? 'flex-1 bg-blue-600 py-4 rounded-xl font-bold' : 'flex-1 bg-gray-700 py-4 rounded-xl font-bold';
             }
@@ -82,32 +84,62 @@
         document.getElementById('setModeLatest').onclick = () => setDoc(doc(db, "display", "config"), { mode: 'latest' });
         document.getElementById('setModeAll').onclick = () => setDoc(doc(db, "display", "config"), { mode: 'all' });
 
-        // Gallery & Management Logic (เหมือนเดิม)
+        // Gallery Logic (Optimized for Speed)
         const gallery = document.getElementById('gallery');
-        onSnapshot(query(collection(db, "photos"), orderBy("timestamp", "desc")), (snapshot) => {
-            gallery.innerHTML = '';
-            snapshot.forEach((docSnap) => {
-                const data = docSnap.data();
-                const card = document.createElement('div');
-                card.className = "bg-gray-800 rounded-xl overflow-hidden border border-gray-700";
-                card.innerHTML = `
-                    <div class="h-40 bg-black"><img src="${data.url}" class="w-full h-full object-cover"></div>
-                    <div class="p-2 grid gap-2">
-                        <button class="bg-green-600 text-white py-1 rounded text-xs send-btn" data-url="${data.url}">ขึ้นจอทันที</button>
-                        <button class="bg-red-600 text-white py-1 rounded text-xs delete-btn" data-id="${docSnap.id}">ลบ</button>
-                    </div>
-                `;
-                gallery.appendChild(card);
-            });
+        
+        // ดึงแค่ 60 รูปล่าสุดมาให้แอดมินดู (หน้าจอดิสเพลย์ยังดึงทั้งหมดตามปกติถ้าเปิดโหมด All)
+        const q = query(collection(db, "photos"), orderBy("timestamp", "asc"), limit(60)); 
+        // หมายเหตุ: ใช้ asc เพื่อให้เวลา insertBefore มันจะเรียงรูปล่าสุดไว้บนสุดพอดี
 
-            document.querySelectorAll('.send-btn').forEach(btn => btn.onclick = (e) => setDoc(doc(db, "display", "main"), { currentImageUrl: e.target.dataset.url, time: Date.now() }));
-            document.querySelectorAll('.delete-btn').forEach(btn => btn.onclick = (e) => confirm("ลบรูปนี้?") && deleteDoc(doc(db, "photos", e.target.dataset.id)));
+        onSnapshot(q, (snapshot) => {
+            // ใช้ docChanges() เพื่ออัปเดตเฉพาะรูปที่เพิ่มหรือลบ ไม่ต้องโหลดใหม่ทั้งกระดาน
+            snapshot.docChanges().forEach((change) => {
+                const data = change.doc.data();
+                const docId = change.doc.id;
+
+                if (change.type === "added") {
+                    const card = document.createElement('div');
+                    card.id = `card-${docId}`; // ตั้ง ID ให้การ์ดเพื่อค้นหาและลบง่ายๆ
+                    card.className = "bg-gray-800 rounded-xl overflow-hidden border border-gray-700 fade-in";
+                    
+                    // สังเกต loading="lazy" ที่แท็ก img
+                    card.innerHTML = `
+                        <div class="h-40 bg-black">
+                            <img src="${data.url}" loading="lazy" class="w-full h-full object-cover">
+                        </div>
+                        <div class="p-2 grid gap-2">
+                            <button class="bg-green-600 text-white py-1 rounded text-xs send-btn">ขึ้นจอทันที</button>
+                            <button class="bg-red-600 text-white py-1 rounded text-xs delete-btn">ลบ</button>
+                        </div>
+                    `;
+                    
+                    // เอารูปใหม่แทรกไว้ด้านบนสุดเสมอ
+                    gallery.insertBefore(card, gallery.firstChild);
+
+                    // ใส่ Event ให้ปุ่มที่เพิ่งสร้าง
+                    card.querySelector('.send-btn').onclick = () => setDoc(doc(db, "display", "main"), { currentImageUrl: data.url, time: Date.now() });
+                    card.querySelector('.delete-btn').onclick = () => {
+                        if (confirm("ลบรูปนี้?")) {
+                            card.style.opacity = '0.3'; // ทำสีจางให้รู้ว่ากำลังลบ
+                            deleteDoc(doc(db, "photos", docId));
+                        }
+                    };
+                }
+
+                // ถ้ารูปถูกลบออกจากฐานข้อมูล ให้เอากล่องนั้นออกจากหน้าจอ
+                if (change.type === "removed") {
+                    const cardToRemove = document.getElementById(`card-${docId}`);
+                    if (cardToRemove) cardToRemove.remove();
+                }
+            });
         });
 
+        // ล้างฐานข้อมูลทั้งหมด
         document.getElementById('clearAllBtn').onclick = async () => {
             if (confirm("ยืนยันลบรูปทั้งหมด?") && confirm("ย้ำอีกครั้ง! ลบหมดเลยนะ?")) {
                 const snap = await getDocs(collection(db, "photos"));
-                snap.forEach(d => deleteDoc(doc(db, "photos", d.id)));
+                const deletePromises = snap.docs.map(d => deleteDoc(doc(db, "photos", d.id)));
+                await Promise.all(deletePromises);
             }
         };
     </script>
