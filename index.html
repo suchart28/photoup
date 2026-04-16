@@ -3,22 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ส่งรูปภาพ</title>
+    <title>ส่งรูปภาพร่วมสนุก</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
-    <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-sm text-center">
-        <div class="text-5xl mb-4">📸</div>
-        <h1 class="text-2xl font-bold mb-6">ส่งรูปภาพร่วมสนุก</h1>
+    <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-sm text-center border-t-8 border-blue-600">
+        <div class="text-6xl mb-6">📸</div>
+        <h1 class="text-2xl font-bold mb-2">แชร์ภาพของคุณ</h1>
+        <p class="text-gray-500 mb-8 text-sm">รูปภาพจะถูกส่งขึ้นจอใหญ่ทันที</p>
         
         <input type="file" id="photoInput" accept="image/*" class="hidden">
-        
-        <button id="uploadBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-full w-full shadow-lg transition-all active:scale-95">
-            ถ่ายรูป / เลือกรูป
+        <button id="uploadBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-5 px-8 rounded-2xl w-full shadow-lg transition-all active:scale-95 text-lg">
+            เลือกรูปภาพ / ถ่ายรูป
         </button>
         
-        <p id="status" class="mt-6 text-sm text-gray-500">เลือกรูปภาพเพื่อส่งขึ้นจอได้เลย!</p>
+        <div id="statusContainer" class="mt-6 hidden">
+            <p id="status" class="text-sm font-bold"></p>
+            <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+                <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+            </div>
+        </div>
     </div>
 
     <script type="module">
@@ -28,6 +33,8 @@
         const photoInput = document.getElementById('photoInput');
         const uploadBtn = document.getElementById('uploadBtn');
         const statusTxt = document.getElementById('status');
+        const statusContainer = document.getElementById('statusContainer');
+        const progressBar = document.getElementById('progressBar');
 
         uploadBtn.addEventListener('click', () => photoInput.click());
 
@@ -35,54 +42,46 @@
             const file = e.target.files[0];
             if (!file) return;
 
-            // เปลี่ยนสถานะปุ่มตอนกำลังโหลด
+            statusContainer.classList.remove('hidden');
             statusTxt.innerText = "⏳ กำลังเตรียมรูปภาพ...";
-            statusTxt.className = "mt-6 text-sm text-blue-500 font-bold";
+            statusTxt.className = "text-blue-500 font-bold";
+            progressBar.style.width = "30%";
             uploadBtn.disabled = true;
             uploadBtn.classList.replace('bg-blue-600', 'bg-gray-400');
-            uploadBtn.classList.remove('hover:bg-blue-700');
 
             try {
-                // บีบอัดภาพเพื่อความรวดเร็ว
-                const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1080, useWebWorker: true };
+                const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true };
                 const compressedFile = await imageCompression(file, options);
+                progressBar.style.width = "60%";
 
                 const reader = new FileReader();
                 reader.readAsDataURL(compressedFile);
                 reader.onloadend = async () => {
                     const base64data = reader.result;
-
-                    statusTxt.innerText = "🚀 กำลังส่งรูปภาพ...";
-
-                    // ส่งรูปขึ้น Firebase ทันที
+                    statusTxt.innerText = "🚀 กำลังอัปโหลด...";
+                    
                     await addDoc(collection(db, "photos"), {
                         url: base64data,
                         timestamp: serverTimestamp()
                     });
 
+                    progressBar.style.width = "100%";
                     statusTxt.innerText = "✅ ส่งรูปภาพสำเร็จ!";
-                    statusTxt.className = "mt-6 text-sm text-green-500 font-bold";
+                    statusTxt.className = "text-green-500 font-bold";
                     
-                    // รีเซ็ตปุ่มให้พร้อมส่งรูปต่อไป
-                    uploadBtn.disabled = false;
-                    uploadBtn.classList.replace('bg-gray-400', 'bg-blue-600');
-                    uploadBtn.classList.add('hover:bg-blue-700');
-                    photoInput.value = ''; // เคลียร์ไฟล์เพื่อให้เลือกรูปซ้ำได้
-                    
-                    // กลับไปข้อความเดิมหลังจากผ่านไป 3 วินาที
                     setTimeout(() => {
-                        statusTxt.innerText = "ส่งรูปภาพเพิ่มได้เลย!";
-                        statusTxt.className = "mt-6 text-sm text-gray-500";
-                    }, 3000);
+                        statusContainer.classList.add('hidden');
+                        progressBar.style.width = "0%";
+                        uploadBtn.disabled = false;
+                        uploadBtn.classList.replace('bg-gray-400', 'bg-blue-600');
+                        photoInput.value = '';
+                    }, 2500);
                 };
             } catch (error) {
-                console.error("Error processing image:", error);
                 statusTxt.innerText = "❌ เกิดข้อผิดพลาด กรุณาลองใหม่";
-                statusTxt.className = "mt-6 text-sm text-red-500 font-bold";
-                
+                statusTxt.className = "text-red-500 font-bold";
                 uploadBtn.disabled = false;
                 uploadBtn.classList.replace('bg-gray-400', 'bg-blue-600');
-                uploadBtn.classList.add('hover:bg-blue-700');
             }
         });
     </script>
