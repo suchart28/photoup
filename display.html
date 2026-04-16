@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Display</title>
+    <title>Display MAX Screen</title>
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -41,7 +41,7 @@
             width: 100%; 
             height: 100%; 
             object-fit: cover; 
-            transition: opacity 0.4s ease-in-out; /* ปรับ Fade ให้เร็วขึ้นอีกนิด */
+            transition: opacity 0.4s ease-in-out; 
         }
         .qr-side { 
             background: white; 
@@ -50,6 +50,17 @@
             text-align: center; 
             flex-shrink: 0; 
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .display-logo {
+            max-width: 250px;
+            max-height: 120px;
+            object-fit: contain;
+            margin-bottom: 1.5rem; /* ระยะห่างโลโก้กับ QR Code */
+            display: none; 
         }
         .qr-label { 
             color: #000; 
@@ -77,13 +88,17 @@
 
     <div class="main-container">
         <div class="qr-side">
+            <img id="logoLeft" class="display-logo" src="" alt="Logo">
             <div id="qrcodeLeft"></div>
             <p class="qr-label">สแกน<br>เพื่อส่งภาพขึ้นจอ</p>
         </div>
+
         <div class="image-frame">
             <img id="displayImg" src="" alt="Waiting...">
         </div>
+
         <div class="qr-side">
+            <img id="logoRight" class="display-logo" src="" alt="Logo">
             <div id="qrcodeRight"></div>
             <p class="qr-label">สแกน<br>เพื่อส่งภาพขึ้นจอ</p>
         </div>
@@ -91,7 +106,7 @@
 
     <script type="module">
         import { db } from './firebase-config.js';
-        import { collection, query, orderBy, limit, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+        import { collection, query, orderBy, limit, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
         const displayImg = document.getElementById('displayImg');
         const closedOverlay = document.getElementById('closedOverlay');
@@ -102,11 +117,10 @@
         let manualOverride = false;
         let currentMode = 'latest';
 
-        // 1. QR Code
+        // สร้าง QR Code
         new QRCode(document.getElementById("qrcodeLeft"), { text: uploadUrl, width: 400, height: 400 });
         new QRCode(document.getElementById("qrcodeRight"), { text: uploadUrl, width: 400, height: 400 });
 
-        // 2. ฟังก์ชันแสดงภาพ (Fast Transition)
         function showImage(url) {
             if (!url || displayImg.src === url) return;
             displayImg.classList.add('fade-out');
@@ -116,7 +130,6 @@
             }, 400); 
         }
 
-        // 3. ฟังก์ชันเลือกภาพสุ่ม
         function pickRandomImage() {
             if (currentPhotos.length > 0) {
                 const randIdx = Math.floor(Math.random() * currentPhotos.length);
@@ -124,19 +137,19 @@
             }
         }
 
-        // 4. เริ่มสไลด์โชว์ (5 วินาที)
         function startSlideshow() {
             if (slideInterval) clearInterval(slideInterval);
-            pickRandomImage(); // ขึ้นภาพแรกทันที
+            pickRandomImage();
             slideInterval = setInterval(() => {
                 if (!manualOverride) pickRandomImage();
             }, 5000); 
         }
 
-        // 5. ติดตาม Config
+        // ฟังคำสั่ง Config (ระบบ, โหมด, โลโก้)
         onSnapshot(doc(db, "display", "config"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
+                
                 closedOverlay.style.display = (data.status === 'closed') ? 'flex' : 'none';
                 if (data.status === 'closed' && slideInterval) clearInterval(slideInterval);
                 
@@ -144,12 +157,25 @@
                     currentMode = data.mode || 'latest';
                     updatePhotoListener();
                 }
+
+                // จัดการ Logo
+                const logoLeft = document.getElementById('logoLeft');
+                const logoRight = document.getElementById('logoRight');
+                if (data.logoUrl) {
+                    logoLeft.src = data.logoUrl;
+                    logoRight.src = data.logoUrl;
+                    logoLeft.style.display = 'block';
+                    logoRight.style.display = 'block';
+                } else {
+                    logoLeft.style.display = 'none';
+                    logoRight.style.display = 'none';
+                }
             } else {
                 updatePhotoListener();
             }
         });
 
-        // 6. ดึงข้อมูลภาพ
+        // ดึงภาพ
         let photoUnsubscribe = null;
         function updatePhotoListener() {
             if (photoUnsubscribe) photoUnsubscribe();
@@ -163,21 +189,18 @@
             });
         }
 
-        // 7. Manual Override (แสดง 5 วินาทีแล้วกลับไปสุ่มต่อทันที)
+        // บังคับขึ้นจอ (Manual)
         onSnapshot(doc(db, "display", "main"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 const now = Date.now();
-                
-                // ตรวจสอบว่าเป็นคำสั่งใหม่ (ภายใน 5 วินาทีที่กด)
                 if (now - data.time < 5000) {
                     manualOverride = true;
                     showImage(data.currentImageUrl);
-                    
                     clearTimeout(window.manualTimer);
                     window.manualTimer = setTimeout(() => {
                         manualOverride = false;
-                        pickRandomImage(); // หมดเวลา 5 วิ รีบสุ่มภาพถัดไปขึ้นมาทันที
+                        pickRandomImage(); 
                     }, 5000); 
                 }
             }
