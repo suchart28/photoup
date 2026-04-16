@@ -8,7 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        /* ตั้งค่าฟอนต์หลักของทั้งหน้า */
+        /* ตั้งค่าฟอนต์หลักและพื้นหลังจอ */
         body { 
             background-color: #000; 
             overflow: hidden; 
@@ -18,7 +18,7 @@
             justify-content: center; 
             height: 100vh; 
             width: 100vw; 
-            font-family: 'Chakra Petch', sans-serif; /* ใช้ฟอนต์ Chakra Petch */
+            font-family: 'Chakra Petch', sans-serif; 
         }
 
         .main-container { 
@@ -30,6 +30,7 @@
             padding: 0 1.5%; 
         }
 
+        /* กรอบรูปตรงกลาง ขยายใหญ่เต็มที่ */
         .image-frame { 
             height: 96vh; 
             aspect-ratio: 1 / 1; 
@@ -45,9 +46,10 @@
             width: 100%; 
             height: 100%; 
             object-fit: cover; 
-            transition: opacity 0.8s ease-in-out; 
+            transition: opacity 0.5s ease-in-out; /* ลดเวลาลงเหลือ 0.5s ให้ภาพตอบสนองไวขึ้น */
         }
 
+        /* กล่อง QR Code ด้านข้าง */
         .qr-side { 
             background: white; 
             padding: 2.5rem; 
@@ -59,7 +61,7 @@
 
         .qr-label { 
             color: #000; 
-            font-weight: 700; /* Chakra Petch ตัวหนา */
+            font-weight: 700; 
             margin-top: 1.5rem; 
             font-size: 2.8rem; 
             line-height: 1.1;
@@ -67,7 +69,7 @@
 
         .fade-out { opacity: 0; }
 
-        /* หน้าจอตอนปิดระบบ */
+        /* หน้าจอตอนแอดมินสั่งปิดระบบ */
         #closedOverlay { 
             position: fixed; 
             inset: 0; 
@@ -93,7 +95,7 @@
     <div class="main-container">
         <div class="qr-side">
             <div id="qrcodeLeft"></div>
-            <p class="qr-label">สแกน<br>เพื่อส่งภาพขึ้นจอ</p>
+            <p class="qr-label">SCAN<br>TO POST</p>
         </div>
 
         <div class="image-frame">
@@ -102,11 +104,11 @@
 
         <div class="qr-side">
             <div id="qrcodeRight"></div>
-            <p class="qr-label">สแกน<br>เพื่อส่งภาพขึ้นจอ</p>
+            <p class="qr-label">SCAN<br>TO POST</p>
         </div>
     </div>
 
-<script type="module">
+    <script type="module">
         import { db } from './firebase-config.js';
         import { collection, query, orderBy, limit, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
@@ -120,25 +122,36 @@
         let currentMode = 'latest';
 
         // 1. สร้าง QR Code
-        const qrOptions = { text: uploadUrl, width: 400, height: 400, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.H };
+        const qrOptions = {
+            text: uploadUrl,
+            width: 400,
+            height: 400,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H
+        };
         new QRCode(document.getElementById("qrcodeLeft"), qrOptions);
         new QRCode(document.getElementById("qrcodeRight"), qrOptions);
 
+        // 2. ฟังก์ชันแสดงภาพ (พร้อม Effect)
         function showImage(url) {
             if (!url || displayImg.src === url) return;
             displayImg.classList.add('fade-out');
             setTimeout(() => {
                 displayImg.src = url;
                 displayImg.onload = () => displayImg.classList.remove('fade-out');
-            }, 500); // ปรับเวลาเฟดให้เร็วขึ้นเพื่อลดความหน่วง
+            }, 500); 
         }
 
+        // 3. ฟังก์ชันสไลด์โชว์
         function startSlideshow() {
             if (slideInterval) clearInterval(slideInterval);
+            
             if (currentPhotos.length > 0 && !manualOverride) {
                 const randIdx = Math.floor(Math.random() * currentPhotos.length);
                 showImage(currentPhotos[randIdx].url);
             }
+            
             slideInterval = setInterval(() => {
                 if (!manualOverride && currentPhotos.length > 0) {
                     const randomIndex = Math.floor(Math.random() * currentPhotos.length);
@@ -147,10 +160,12 @@
             }, 5000);
         }
 
-        // 2. ฟัง Config (โหมด และ เปิด/ปิด)
+        // 4. ฟังคำสั่ง Config (โหมดการสุ่ม และ สถานะระบบ)
         onSnapshot(doc(db, "display", "config"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
+                
+                // เช็คสถานะ เปิด/ปิด ระบบ
                 if (data.status === 'closed') {
                     closedOverlay.style.display = 'flex';
                     if (slideInterval) clearInterval(slideInterval);
@@ -159,6 +174,7 @@
                     closedOverlay.style.display = 'none';
                 }
                 
+                // เช็คโหมด
                 if (currentMode !== data.mode) {
                     currentMode = data.mode || 'latest';
                     updatePhotoListener();
@@ -168,7 +184,7 @@
             }
         });
 
-        // 3. ป้องกันการโหลดหนัก (หัวใจสำคัญที่แก้เครื่องค้าง)
+        // 5. ดึงข้อมูลภาพแบบจำกัดจำนวน (ลดอาการค้าง)
         let photoUnsubscribe = null;
         function updatePhotoListener() {
             if (photoUnsubscribe) photoUnsubscribe();
@@ -179,7 +195,7 @@
             if (currentMode === 'latest') {
                 q = query(photoCol, orderBy("timestamp", "desc"), limit(10));
             } else {
-                // 🛑 ลิมิตไว้ที่ 100 รูปล่าสุด เพื่อไม่ให้เบราว์เซอร์และเน็ตค้างตาย
+                // จำกัดแค่ 100 รูปเพื่อไม่ให้หน้าเว็บและอินเทอร์เน็ตโหลดหนักเกินไป
                 q = query(photoCol, orderBy("timestamp", "desc"), limit(100)); 
             }
 
@@ -192,13 +208,13 @@
             });
         }
 
-        // 4. บังคับขึ้นจอ (อัปเดตให้เช็คเวลา ป้องกันบัคภาพค้างตอนโหลดหน้าเว็บใหม่)
+        // 6. ฟังคำสั่ง "ขึ้นจอทันที" จาก Admin
         onSnapshot(doc(db, "display", "main"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 const now = Date.now();
                 
-                // ถ้ารับคำสั่งมาเกิน 15 วินาทีแล้ว ให้ข้ามไป (ป้องกันบัคตอนรีเฟรชหน้า)
+                // ทำงานเฉพาะคำสั่งที่กดมาไม่เกิน 15 วินาที
                 if (now - data.time < 15000) {
                     manualOverride = true;
                     showImage(data.currentImageUrl);
@@ -206,12 +222,13 @@
                     clearTimeout(window.manualTimer);
                     window.manualTimer = setTimeout(() => {
                         manualOverride = false;
-                        // เมื่อหมดเวลาโชว์ภาพบังคับ ให้สุ่มภาพต่อไปขึ้นทันทีโดยไม่ต้องรอ
+                        
+                        // เมื่อหมดเวลาโชว์ภาพบังคับ ให้สุ่มภาพใหม่ขึ้นมา 1 ภาพทันที
                         if (currentPhotos.length > 0) {
                             const randomIndex = Math.floor(Math.random() * currentPhotos.length);
                             showImage(currentPhotos[randomIndex].url);
                         }
-                    }, 15000);
+                    }, 15000); // แสดงภาพที่แอดมินเลือกค้างไว้ 15 วินาที
                 }
             }
         });
