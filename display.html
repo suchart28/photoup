@@ -2,55 +2,35 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <title>Display Screen 16:9 - MAX SIZE</title>
+    <title>Display MAX Screen</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        body { 
-            background-color: #000; overflow: hidden; margin: 0; 
-            height: 100vh; width: 100vw; display: flex; align-items: center; justify-content: center;
-        }
-
-        .main-container {
-            display: flex; align-items: center; justify-content: space-between;
-            width: 100%; height: 100%; padding: 0 20px;
-        }
-
-        /* 2. ขยายภาพสี่เหลี่ยมจัตุรัสให้เกือบเต็มความสูงจอ */
-        .image-frame {
-            height: 96vh; /* ขยายเกือบเต็มความสูงจอ */
-            aspect-ratio: 1 / 1; 
-            overflow: hidden;
-            border-radius: 20px;
-            border: 10px solid #fff;
-            box-shadow: 0 0 100px rgba(255,255,255,0.2);
-            background: #111;
-        }
-
+        body { background-color: #000; overflow: hidden; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; width: 100vw; }
+        .main-container { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 100%; padding: 0 1%; }
+        .image-frame { height: 96vh; aspect-ratio: 1/1; overflow: hidden; border-radius: 15px; border: 12px solid #fff; box-shadow: 0 0 50px rgba(255,255,255,0.2); background: #111; }
         #displayImg { width: 100%; height: 100%; object-fit: cover; transition: opacity 0.8s ease-in-out; }
-
-        /* 2. ขยาย QR Code ให้ใหญ่ขึ้น */
-        .qr-side {
-            background: white; padding: 25px; border-radius: 30px; text-align: center;
-            flex-shrink: 0; margin: 0 10px;
-        }
-
-        .qr-label { color: #000; font-weight: 900; margin-top: 15px; font-size: 1.8rem; }
+        .qr-side { background: white; padding: 2.5rem; border-radius: 30px; text-align: center; flex-shrink: 0; }
+        .qr-label { color: #000; font-weight: 900; margin-top: 1.5rem; font-size: 2.5rem; font-family: sans-serif; }
         .fade-out { opacity: 0; }
     </style>
 </head>
 <body>
+
+    <div id="closedOverlay" class="fixed inset-0 bg-black z-[9999] hidden flex-col items-center justify-center text-center p-10">
+        <div class="text-[15rem] mb-10">🚫</div>
+        <h1 class="text-white text-8xl font-bold mb-8">ตอนนี้ระบบปิดอยู่</h1>
+        <p class="text-gray-300 text-5xl">ต้องการเปิดใช้งานโทรหา <span class="text-yellow-400 underline">0817396280</span></p>
+    </div>
 
     <div class="main-container">
         <div class="qr-side">
             <div id="qrcodeLeft"></div>
             <p class="qr-label">SCAN TO POST</p>
         </div>
-
         <div class="image-frame">
-            <img id="displayImg" src="" alt="Screen">
+            <img id="displayImg" src="" alt="Photo">
         </div>
-
         <div class="qr-side">
             <div id="qrcodeRight"></div>
             <p class="qr-label">SCAN TO POST</p>
@@ -62,65 +42,66 @@
         import { collection, query, orderBy, limit, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
         const displayImg = document.getElementById('displayImg');
+        const closedOverlay = document.getElementById('closedOverlay');
         const uploadUrl = "https://suchart28.github.io/photoup/"; 
-        let currentPhotos = [];
-        let slideInterval = null;
-        let manualOverride = false;
-        let currentMode = 'latest';
+        let currentPhotos = [], slideInterval = null, manualOverride = false, currentMode = 'latest';
 
-        // สร้าง QR Code ขนาดใหญ่ (300px)
-        const qrConfig = { text: uploadUrl, width: 300, height: 300, colorDark: "#000", correctLevel: QRCode.CorrectLevel.H };
-        new QRCode(document.getElementById("qrcodeLeft"), qrConfig);
-        new QRCode(document.getElementById("qrcodeRight"), qrConfig);
+        // QR Code ขนาดใหญ่
+        const qrCfg = { text: uploadUrl, width: 400, height: 400, correctLevel: QRCode.CorrectLevel.H };
+        new QRCode(document.getElementById("qrcodeLeft"), qrCfg);
+        new QRCode(document.getElementById("qrcodeRight"), qrCfg);
 
         function showImage(url) {
             if (displayImg.src === url) return;
             displayImg.classList.add('fade-out');
-            setTimeout(() => {
-                displayImg.src = url;
-                displayImg.onload = () => displayImg.classList.remove('fade-out');
-            }, 800);
+            setTimeout(() => { displayImg.src = url; displayImg.onload = () => displayImg.classList.remove('fade-out'); }, 800);
         }
 
         function startSlideshow() {
             if (slideInterval) clearInterval(slideInterval);
             slideInterval = setInterval(() => {
                 if (!manualOverride && currentPhotos.length > 0) {
-                    const randomIndex = Math.floor(Math.random() * currentPhotos.length);
-                    showImage(currentPhotos[randomIndex].url);
+                    const randIdx = Math.floor(Math.random() * currentPhotos.length);
+                    showImage(currentPhotos[randIdx].url);
                 }
             }, 5000);
         }
 
-        // ฟังคำสั่งเปลี่ยนโหมดจาก Admin
+        // ฟัง Config (Mode & System Status)
         onSnapshot(doc(db, "display", "config"), (docSnap) => {
             if (docSnap.exists()) {
-                currentMode = docSnap.data().mode;
-                updatePhotoListener();
+                const data = docSnap.data();
+                currentMode = data.mode || 'latest';
+                
+                if (data.status === 'closed') {
+                    closedOverlay.classList.remove('hidden'); closedOverlay.classList.add('flex');
+                    if (slideInterval) clearInterval(slideInterval);
+                } else {
+                    closedOverlay.classList.add('hidden'); closedOverlay.classList.remove('flex');
+                    updatePhotoListener();
+                }
             }
         });
 
-        let photoUnsubscribe = null;
+        let photoUnsub = null;
         function updatePhotoListener() {
-            if (photoUnsubscribe) photoUnsubscribe();
-            
+            if (photoUnsub) photoUnsub();
             const q = currentMode === 'latest' 
                 ? query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(10))
                 : query(collection(db, "photos"), orderBy("timestamp", "desc"));
-
-            photoUnsubscribe = onSnapshot(q, (snapshot) => {
-                currentPhotos = snapshot.docs.map(d => d.data());
+            photoUnsub = onSnapshot(q, (snap) => {
+                currentPhotos = snap.docs.map(d => d.data());
                 if (!manualOverride && !slideInterval) startSlideshow();
             });
         }
 
-        // Force Display จาก Admin
+        // Force Display
         onSnapshot(doc(db, "display", "main"), (docSnap) => {
             if (docSnap.exists()) {
                 manualOverride = true;
                 showImage(docSnap.data().currentImageUrl);
-                clearTimeout(window.manualTimer);
-                window.manualTimer = setTimeout(() => manualOverride = false, 15000);
+                clearTimeout(window.mTimer);
+                window.mTimer = setTimeout(() => { manualOverride = false; }, 15000);
             }
         });
     </script>
