@@ -31,6 +31,7 @@
         const statusTxt = document.getElementById('status');
         let aiModel = null;
 
+        // 1. โหลด AI
         cocoSsd.load().then(model => {
             aiModel = model;
             uploadBtn.disabled = false;
@@ -44,40 +45,54 @@
             const file = e.target.files[0];
             if (!file) return;
 
-            statusTxt.innerText = "🤖 AI กำลังตรวจสอบภาพ...";
+            statusTxt.innerText = "⏳ กำลังเตรียมรูปภาพ...";
+            statusTxt.className = "mt-6 text-sm text-blue-500 font-bold";
             uploadBtn.disabled = true;
 
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = async (ev) => {
-                const img = new Image();
-                img.src = ev.target.result;
-                img.onload = async () => {
-                    const predictions = await aiModel.detect(img);
-                    const isPerson = predictions.some(p => p.class === 'person');
+            try {
+                // 2. ทำการบีบอัดและแก้ปัญหา EXIF (ภาพกลับหัว) ทันทีที่เลือกรูป
+                const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1080, useWebWorker: true };
+                const compressedFile = await imageCompression(file, options);
 
-                    if (!isPerson) {
-                        statusTxt.innerText = "❌ ตรวจไม่พบคนในภาพ กรุณาลองใหม่";
-                        statusTxt.className = "mt-6 text-sm text-red-500 font-bold";
-                        uploadBtn.disabled = false;
-                        return;
-                    }
+                const reader = new FileReader();
+                reader.readAsDataURL(compressedFile);
+                reader.onloadend = async () => {
+                    const base64data = reader.result;
 
-                    statusTxt.innerText = "⏳ กำลังอัปโหลด...";
-                    const compressed = await imageCompression(file, { maxSizeMB: 0.5, maxWidthOrHeight: 1080 });
-                    const finalReader = new FileReader();
-                    finalReader.readAsDataURL(compressed);
-                    finalReader.onloadend = async () => {
+                    const img = new Image();
+                    img.src = base64data;
+                    img.onload = async () => {
+                        statusTxt.innerText = "🤖 AI กำลังตรวจสอบภาพ...";
+                        
+                        // 3. ให้ AI ตรวจสอบจากภาพที่ถูกปรับขนาดและตั้งตรงเรียบร้อยแล้ว
+                        const predictions = await aiModel.detect(img);
+                        const isPerson = predictions.some(p => p.class === 'person');
+
+                        if (!isPerson) {
+                            statusTxt.innerText = "❌ ตรวจไม่พบคนในภาพ กรุณาลองใหม่";
+                            statusTxt.className = "mt-6 text-sm text-red-500 font-bold";
+                            uploadBtn.disabled = false;
+                            return;
+                        }
+
+                        // 4. ถ้าพบคน ส่งข้อมูลที่บีบอัดแล้วขึ้น Firebase ได้เลย
+                        statusTxt.innerText = "🚀 ผ่าน! กำลังส่งรูปภาพ...";
                         await addDoc(collection(db, "photos"), {
-                            url: finalReader.result,
+                            url: base64data,
                             timestamp: serverTimestamp()
                         });
+
                         statusTxt.innerText = "✅ ส่งรูปภาพสำเร็จ!";
                         statusTxt.className = "mt-6 text-sm text-green-500 font-bold";
                         uploadBtn.disabled = false;
                     };
                 };
-            };
+            } catch (error) {
+                console.error("Error processing image:", error);
+                statusTxt.innerText = "❌ เกิดข้อผิดพลาด กรุณาลองใหม่";
+                statusTxt.className = "mt-6 text-sm text-red-500 font-bold";
+                uploadBtn.disabled = false;
+            }
         });
     </script>
 </body>
