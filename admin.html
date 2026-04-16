@@ -34,12 +34,12 @@
                 </button>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 
                 <div class="bg-gray-800 p-6 rounded-2xl border border-red-500/30">
-                    <h2 class="text-xl font-bold mb-4 flex items-center gap-2">⚠️ สถานะการเข้าถึงระบบ</h2>
+                    <h2 class="text-xl font-bold mb-4 flex items-center gap-2">⚠️ สถานะการเข้าถึง</h2>
                     <div class="flex gap-4">
-                        <button id="btnOpenSystem" class="flex-1 py-4 rounded-xl font-bold transition-all border border-gray-600">เปิดระบบปกติ</button>
+                        <button id="btnOpenSystem" class="flex-1 py-4 rounded-xl font-bold transition-all border border-gray-600">เปิดระบบ</button>
                         <button id="btnCloseSystem" class="flex-1 py-4 rounded-xl font-bold transition-all border border-gray-600">ปิดการทำงาน</button>
                     </div>
                     <p id="systemStatusLabel" class="mt-3 text-center font-medium">กำลังตรวจสอบ...</p>
@@ -48,17 +48,28 @@
                 <div class="bg-gray-800 p-6 rounded-2xl border border-blue-500/30">
                     <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📺 โหมดการสุ่มภาพ</h2>
                     <div class="flex gap-4">
-                        <button id="setModeLatest" class="flex-1 py-4 rounded-xl font-bold transition-all border border-gray-600">10 ภาพล่าสุด</button>
-                        <button id="setModeAll" class="flex-1 py-4 rounded-xl font-bold transition-all border border-gray-600">สุ่มภาพทั้งหมด</button>
+                        <button id="setModeLatest" class="flex-1 py-4 rounded-xl font-bold transition-all border border-gray-600">10 ล่าสุด</button>
+                        <button id="setModeAll" class="flex-1 py-4 rounded-xl font-bold transition-all border border-gray-600">สุ่มทั้งหมด</button>
                     </div>
                     <p id="currentModeStatus" class="mt-3 text-center text-blue-400 font-medium">กำลังโหลด...</p>
+                </div>
+
+                <div class="bg-gray-800 p-6 rounded-2xl border border-purple-500/30">
+                    <h2 class="text-xl font-bold mb-4 flex items-center gap-2">✨ โลโก้หน้าจอ</h2>
+                    <input type="file" id="logoUploadInput" accept="image/*" class="hidden">
+                    <button id="btnUploadLogo" class="w-full bg-purple-600 hover:bg-purple-500 py-3 rounded-xl font-bold transition-all border border-gray-600">
+                        เลือกไฟล์ Logo
+                    </button>
+                    <button id="btnRemoveLogo" class="w-full mt-2 bg-gray-700 hover:bg-red-600 py-2 rounded-xl font-bold transition-all text-sm">
+                        ลบ Logo ออก
+                    </button>
                 </div>
 
             </div>
 
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold">🖼️ คัดกรองรูปภาพ</h2>
-                <p class="text-sm text-gray-400">ดึง 60 รูปล่าสุดมาแสดง</p>
+                <p class="text-sm text-gray-400">แสดง 60 รูปล่าสุด</p>
             </div>
             <div id="gallery" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
             
@@ -69,7 +80,7 @@
         import { db } from './firebase-config.js';
         import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
-        // --- ระบบ Login ---
+        // Login
         const ADMIN_PIN = "878556";
         if (sessionStorage.getItem('adminAuth') === 'true') grantAccess();
         
@@ -77,9 +88,7 @@
             if (document.getElementById('pinInput').value === ADMIN_PIN) {
                 sessionStorage.setItem('adminAuth', 'true');
                 grantAccess();
-            } else { 
-                alert("รหัสผ่านผิด!"); 
-            }
+            } else { alert("รหัสผ่านผิด!"); }
         });
         
         function grantAccess() {
@@ -87,13 +96,13 @@
             document.getElementById('adminContent').classList.remove('hidden');
         }
 
-        // --- ดึงสถานะปัจจุบันของระบบ (Config) ---
+        // ดึง Config
         onSnapshot(doc(db, "display", "config"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 
                 const isClosed = data.status === 'closed';
-                document.getElementById('systemStatusLabel').innerText = isClosed ? '🔴 ระบบถูกปิดการใช้งาน' : '🟢 ระบบเปิดใช้งานปกติ';
+                document.getElementById('systemStatusLabel').innerText = isClosed ? '🔴 ระบบถูกปิด' : '🟢 ระบบเปิดใช้งาน';
                 document.getElementById('systemStatusLabel').className = isClosed ? 'mt-3 text-center font-medium text-red-400' : 'mt-3 text-center font-medium text-green-400';
                 
                 document.getElementById('btnOpenSystem').className = !isClosed ? 'flex-1 bg-green-600 py-4 rounded-xl font-bold' : 'flex-1 bg-gray-700 py-4 rounded-xl font-bold';
@@ -107,28 +116,41 @@
             }
         });
 
-        // --- ปุ่มสั่งงาน Config ---
         document.getElementById('btnOpenSystem').onclick = () => setDoc(doc(db, "display", "config"), { status: 'open' }, { merge: true });
-        document.getElementById('btnCloseSystem').onclick = () => {
-            if(confirm("หน้าจอ Display จะถูกระงับทันที ยืนยันปิดระบบหรือไม่?")) {
-                setDoc(doc(db, "display", "config"), { status: 'closed' }, { merge: true });
-            }
-        };
-        
+        document.getElementById('btnCloseSystem').onclick = () => { if(confirm("ปิดหน้าจอ Display ทันที?")) setDoc(doc(db, "display", "config"), { status: 'closed' }, { merge: true }); };
         document.getElementById('setModeLatest').onclick = () => setDoc(doc(db, "display", "config"), { mode: 'latest' }, { merge: true });
         document.getElementById('setModeAll').onclick = () => setDoc(doc(db, "display", "config"), { mode: 'all' }, { merge: true });
 
-        // --- การแสดงแกลเลอรี่รูปภาพ ---
+        // จัดการโลโก้ (ส่วนที่เพิ่มใหม่)
+        document.getElementById('btnUploadLogo').onclick = () => document.getElementById('logoUploadInput').click();
+        
+        document.getElementById('logoUploadInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                setDoc(doc(db, "display", "config"), { logoUrl: event.target.result }, { merge: true })
+                    .then(() => alert("อัปโหลดโลโก้ขึ้นจอเรียบร้อยแล้ว!"))
+                    .catch((err) => alert("Error: " + err));
+            };
+            reader.readAsDataURL(file); 
+        });
+
+        document.getElementById('btnRemoveLogo').onclick = () => {
+            if (confirm("ต้องการลบ Logo ออกจากหน้าจอหรือไม่?")) {
+                setDoc(doc(db, "display", "config"), { logoUrl: null }, { merge: true });
+            }
+        };
+
+        // แกลเลอรี่รูปภาพ
         const gallery = document.getElementById('gallery');
         const q = query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(60));
 
         onSnapshot(q, (snapshot) => {
             gallery.innerHTML = ''; 
-            
             snapshot.docs.forEach((docSnap) => {
                 const data = docSnap.data();
                 const docId = docSnap.id;
-                
                 if (!data.timestamp) return; 
 
                 const card = document.createElement('div');
@@ -140,36 +162,33 @@
                         <img src="${data.url}" loading="lazy" class="w-full h-full object-cover">
                     </div>
                     <div class="p-2 grid gap-1">
-                        <button class="bg-green-600 hover:bg-green-500 text-white py-2 rounded text-xs font-bold send-btn transition-colors">ขึ้นจอทันที</button>
+                        <button class="bg-green-600 hover:bg-green-500 text-white py-2 rounded text-xs font-bold send-btn transition-colors">ขึ้นจอ 5 วิ</button>
                         <button class="bg-red-600 hover:bg-red-500 text-white py-1 rounded text-[10px] delete-btn transition-colors">ลบ</button>
                     </div>
                 `;
                 
                 gallery.appendChild(card);
                 
-                // สั่งภาพขึ้นจอแบบ Manual Override
                 card.querySelector('.send-btn').onclick = () => {
                     setDoc(doc(db, "display", "main"), { currentImageUrl: data.url, time: Date.now() });
                     const btn = card.querySelector('.send-btn');
                     btn.innerText = "ส่งแล้ว!";
                     btn.classList.replace('bg-green-600', 'bg-blue-600');
                     setTimeout(() => {
-                        btn.innerText = "ขึ้นจอทันที";
+                        btn.innerText = "ขึ้นจอ 5 วิ";
                         btn.classList.replace('bg-blue-600', 'bg-green-600');
                     }, 2000);
                 };
 
-                // ปุ่มลบรูป (ลบแบบไม่ต้องถามยืนยัน)
-                card.querySelector('.delete-btn').onclick = () => {
-                    deleteDoc(doc(db, "photos", docId));
-                };
+                // ลบโดยไม่ต้องถามยืนยัน
+                card.querySelector('.delete-btn').onclick = () => deleteDoc(doc(db, "photos", docId));
             });
         });
 
-        // --- ปุ่มเคลียร์ภาพทั้งหมด (ลบถาวร ยังมีถามยืนยันอยู่เพื่อความปลอดภัย) ---
+        // ล้างรูปทั้งหมด
         document.getElementById('clearAllBtn').onclick = async () => {
-            if (confirm("คุณกำลังจะลบรูปทั้งหมดในระบบ ข้อมูลนี้กู้คืนไม่ได้! \n\nยืนยันการลบใช่หรือไม่?")) {
-                if (confirm("ย้ำอีกครั้ง! ระบบจะลบรูปทั้งหมดออกจากฐานข้อมูลทันทีนะ?")) {
+            if (confirm("ลบรูปทั้งหมด ข้อมูลกู้คืนไม่ได้! \n\nยืนยัน?")) {
+                if (confirm("ย้ำอีกครั้ง ลบทันที?")) {
                     const snap = await getDocs(collection(db, "photos"));
                     const deletePromises = snap.docs.map(d => deleteDoc(doc(db, "photos", d.id)));
                     await Promise.all(deletePromises);
