@@ -92,7 +92,6 @@
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 
-                // อัปเดต UI เปิด/ปิด ระบบ
                 const isClosed = data.status === 'closed';
                 document.getElementById('systemStatusLabel').innerText = isClosed ? '🔴 ระบบถูกปิดการใช้งาน' : '🟢 ระบบเปิดใช้งานปกติ';
                 document.getElementById('systemStatusLabel').className = isClosed ? 'mt-3 text-center font-medium text-red-400' : 'mt-3 text-center font-medium text-green-400';
@@ -100,7 +99,6 @@
                 document.getElementById('btnOpenSystem').className = !isClosed ? 'flex-1 bg-green-600 py-4 rounded-xl font-bold' : 'flex-1 bg-gray-700 py-4 rounded-xl font-bold';
                 document.getElementById('btnCloseSystem').className = isClosed ? 'flex-1 bg-red-600 py-4 rounded-xl font-bold' : 'flex-1 bg-gray-700 py-4 rounded-xl font-bold';
 
-                // อัปเดต UI โหมดการสุ่ม
                 const mode = data.mode || 'latest';
                 document.getElementById('currentModeStatus').innerText = `ปัจจุบัน: สุ่ม${mode === 'latest' ? ' 10 ภาพล่าสุด' : 'ภาพทั้งหมด'}`;
                 
@@ -120,21 +118,17 @@
         document.getElementById('setModeLatest').onclick = () => setDoc(doc(db, "display", "config"), { mode: 'latest' }, { merge: true });
         document.getElementById('setModeAll').onclick = () => setDoc(doc(db, "display", "config"), { mode: 'all' }, { merge: true });
 
-        // --- การแสดงแกลเลอรี่รูปภาพ (ดึงภาพใหม่ล่าสุดเสมอ) ---
+        // --- การแสดงแกลเลอรี่รูปภาพ ---
         const gallery = document.getElementById('gallery');
-        
-        // ใช้ desc เพื่อให้ภาพที่เพิ่งอัปโหลดใหม่ล่าสุดอยู่บนสุดเสมอ และจำกัด 60 รูปเพื่อไม่ให้แอดมินโหลดหนัก
         const q = query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(60));
 
         onSnapshot(q, (snapshot) => {
-            // เคลียร์กระดานและวาดใหม่ ป้องกันบัคลำดับภาพเพี้ยน
             gallery.innerHTML = ''; 
             
             snapshot.docs.forEach((docSnap) => {
                 const data = docSnap.data();
                 const docId = docSnap.id;
                 
-                // ข้ามรูปที่กำลังอัปโหลดและเวลายังไม่ถูกบันทึก
                 if (!data.timestamp) return; 
 
                 const card = document.createElement('div');
@@ -156,7 +150,6 @@
                 // สั่งภาพขึ้นจอแบบ Manual Override
                 card.querySelector('.send-btn').onclick = () => {
                     setDoc(doc(db, "display", "main"), { currentImageUrl: data.url, time: Date.now() });
-                    // สร้าง Feedback ให้แอดมินรู้ว่ากดติดแล้ว
                     const btn = card.querySelector('.send-btn');
                     btn.innerText = "ส่งแล้ว!";
                     btn.classList.replace('bg-green-600', 'bg-blue-600');
@@ -166,16 +159,14 @@
                     }, 2000);
                 };
 
-                // ปุ่มลบรูป
+                // ปุ่มลบรูป (ลบแบบไม่ต้องถามยืนยัน)
                 card.querySelector('.delete-btn').onclick = () => {
-                    if (confirm("ต้องการลบรูปภาพนี้ออกจากระบบใช่หรือไม่?")) {
-                        deleteDoc(doc(db, "photos", docId));
-                    }
+                    deleteDoc(doc(db, "photos", docId));
                 };
             });
         });
 
-        // --- ปุ่มเคลียร์ภาพทั้งหมด (ลบถาวร) ---
+        // --- ปุ่มเคลียร์ภาพทั้งหมด (ลบถาวร ยังมีถามยืนยันอยู่เพื่อความปลอดภัย) ---
         document.getElementById('clearAllBtn').onclick = async () => {
             if (confirm("คุณกำลังจะลบรูปทั้งหมดในระบบ ข้อมูลนี้กู้คืนไม่ได้! \n\nยืนยันการลบใช่หรือไม่?")) {
                 if (confirm("ย้ำอีกครั้ง! ระบบจะลบรูปทั้งหมดออกจากฐานข้อมูลทันทีนะ?")) {
