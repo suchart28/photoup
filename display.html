@@ -106,7 +106,7 @@
         </div>
     </div>
 
-    <script type="module">
+<script type="module">
         import { db } from './firebase-config.js';
         import { collection, query, orderBy, limit, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
@@ -119,14 +119,8 @@
         let manualOverride = false;
         let currentMode = 'latest';
 
-        const qrOptions = {
-            text: uploadUrl,
-            width: 400,
-            height: 400,
-            colorDark: "#000000",
-            colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.H
-        };
+        // 1. สร้าง QR Code
+        const qrOptions = { text: uploadUrl, width: 400, height: 400, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.H };
         new QRCode(document.getElementById("qrcodeLeft"), qrOptions);
         new QRCode(document.getElementById("qrcodeRight"), qrOptions);
 
@@ -136,12 +130,12 @@
             setTimeout(() => {
                 displayImg.src = url;
                 displayImg.onload = () => displayImg.classList.remove('fade-out');
-            }, 800);
+            }, 500); // ปรับเวลาเฟดให้เร็วขึ้นเพื่อลดความหน่วง
         }
 
         function startSlideshow() {
             if (slideInterval) clearInterval(slideInterval);
-            if (currentPhotos.length > 0) {
+            if (currentPhotos.length > 0 && !manualOverride) {
                 const randIdx = Math.floor(Math.random() * currentPhotos.length);
                 showImage(currentPhotos[randIdx].url);
             }
@@ -153,6 +147,7 @@
             }, 5000);
         }
 
+        // 2. ฟัง Config (โหมด และ เปิด/ปิด)
         onSnapshot(doc(db, "display", "config"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
@@ -163,6 +158,7 @@
                 } else {
                     closedOverlay.style.display = 'none';
                 }
+                
                 if (currentMode !== data.mode) {
                     currentMode = data.mode || 'latest';
                     updatePhotoListener();
@@ -172,31 +168,51 @@
             }
         });
 
+        // 3. ป้องกันการโหลดหนัก (หัวใจสำคัญที่แก้เครื่องค้าง)
         let photoUnsubscribe = null;
         function updatePhotoListener() {
             if (photoUnsubscribe) photoUnsubscribe();
+            
             const photoCol = collection(db, "photos");
-            let q = query(photoCol, orderBy("timestamp", "desc"));
+            let q;
+            
             if (currentMode === 'latest') {
                 q = query(photoCol, orderBy("timestamp", "desc"), limit(10));
+            } else {
+                // 🛑 ลิมิตไว้ที่ 100 รูปล่าสุด เพื่อไม่ให้เบราว์เซอร์และเน็ตค้างตาย
+                q = query(photoCol, orderBy("timestamp", "desc"), limit(100)); 
             }
+
             photoUnsubscribe = onSnapshot(q, (snapshot) => {
                 currentPhotos = snapshot.docs.map(d => d.data());
+                console.log(`ดึงข้อมูลสำเร็จ: ${currentPhotos.length} รูป`);
                 if (currentPhotos.length > 0 && !slideInterval) {
                     startSlideshow();
                 }
             });
         }
 
+        // 4. บังคับขึ้นจอ (อัปเดตให้เช็คเวลา ป้องกันบัคภาพค้างตอนโหลดหน้าเว็บใหม่)
         onSnapshot(doc(db, "display", "main"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                manualOverride = true;
-                showImage(data.currentImageUrl);
-                clearTimeout(window.manualTimer);
-                window.manualTimer = setTimeout(() => {
-                    manualOverride = false;
-                }, 15000);
+                const now = Date.now();
+                
+                // ถ้ารับคำสั่งมาเกิน 15 วินาทีแล้ว ให้ข้ามไป (ป้องกันบัคตอนรีเฟรชหน้า)
+                if (now - data.time < 15000) {
+                    manualOverride = true;
+                    showImage(data.currentImageUrl);
+                    
+                    clearTimeout(window.manualTimer);
+                    window.manualTimer = setTimeout(() => {
+                        manualOverride = false;
+                        // เมื่อหมดเวลาโชว์ภาพบังคับ ให้สุ่มภาพต่อไปขึ้นทันทีโดยไม่ต้องรอ
+                        if (currentPhotos.length > 0) {
+                            const randomIndex = Math.floor(Math.random() * currentPhotos.length);
+                            showImage(currentPhotos[randomIndex].url);
+                        }
+                    }, 15000);
+                }
             }
         });
     </script>
