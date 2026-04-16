@@ -2,38 +2,109 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <title>Display MAX Screen</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Display MAX Screen - 16:9</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        body { background-color: #000; overflow: hidden; margin: 0; display: flex; align-items: center; justify-content: center; height: 100vh; width: 100vw; }
-        .main-container { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 100%; padding: 0 1%; }
-        .image-frame { height: 96vh; aspect-ratio: 1/1; overflow: hidden; border-radius: 15px; border: 12px solid #fff; box-shadow: 0 0 50px rgba(255,255,255,0.2); background: #111; }
-        #displayImg { width: 100%; height: 100%; object-fit: cover; transition: opacity 0.8s ease-in-out; }
-        .qr-side { background: white; padding: 2.5rem; border-radius: 30px; text-align: center; flex-shrink: 0; }
-        .qr-label { color: #000; font-weight: 900; margin-top: 1.5rem; font-size: 2.5rem; font-family: sans-serif; }
+        /* ตั้งค่าพื้นฐานให้เต็มจอ 16:9 */
+        body { 
+            background-color: #000; 
+            overflow: hidden; 
+            margin: 0; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            height: 100vh; 
+            width: 100vw; 
+            font-family: sans-serif;
+        }
+
+        /* Container หลัก จัดวาง QR ซ้าย-ขวา และรูปกลาง */
+        .main-container { 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            width: 100%; 
+            height: 100%; 
+            padding: 0 1.5%; 
+        }
+
+        /* เฟรมรูปภาพตรงกลาง ขยายใหญ่ที่สุด (96% ของความสูงจอ) */
+        .image-frame { 
+            height: 96vh; 
+            aspect-ratio: 1 / 1; 
+            overflow: hidden; 
+            border-radius: 20px; 
+            border: 12px solid #fff; 
+            box-shadow: 0 0 60px rgba(255,255,255,0.15); 
+            background: #111; 
+            position: relative;
+        }
+
+        #displayImg { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+            transition: opacity 0.8s ease-in-out; 
+        }
+
+        /* ส่วนของ QR Code */
+        .qr-side { 
+            background: white; 
+            padding: 2.5rem; 
+            border-radius: 40px; 
+            text-align: center; 
+            flex-shrink: 0; 
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        .qr-label { 
+            color: #000; 
+            font-weight: 900; 
+            margin-top: 1.5rem; 
+            font-size: 2.8rem; 
+            line-height: 1;
+        }
+
         .fade-out { opacity: 0; }
+
+        /* หน้าจอตอนปิดระบบ */
+        #closedOverlay { 
+            position: fixed; 
+            inset: 0; 
+            background: #000; 
+            z-index: 9999; 
+            display: none; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            text-align: center; 
+        }
     </style>
 </head>
 <body>
 
-    <div id="closedOverlay" class="fixed inset-0 bg-black z-[9999] hidden flex-col items-center justify-center text-center p-10">
+    <div id="closedOverlay">
         <div class="text-[15rem] mb-10">🚫</div>
         <h1 class="text-white text-8xl font-bold mb-8">ตอนนี้ระบบปิดอยู่</h1>
-        <p class="text-gray-300 text-5xl">ต้องการเปิดใช้งานโทรหา <span class="text-yellow-400 underline">0817396280</span></p>
+        <p class="text-gray-400 text-5xl">ต้องการเปิดใช้งานโปรดโทรหา</p>
+        <p class="text-yellow-400 text-7xl font-bold mt-4 underline">0817396280</p>
     </div>
 
     <div class="main-container">
         <div class="qr-side">
             <div id="qrcodeLeft"></div>
-            <p class="qr-label">SCAN TO POST</p>
+            <p class="qr-label">สแกน QR<br>เพื่อส่งภาพขึ้นจอ</p>
         </div>
+
         <div class="image-frame">
-            <img id="displayImg" src="" alt="Photo">
+            <img id="displayImg" src="" alt="Waiting for photos...">
         </div>
+
         <div class="qr-side">
             <div id="qrcodeRight"></div>
-            <p class="qr-label">SCAN TO POST</p>
+            <p class="qr-label">สแกน QR<br>เพื่อส่งภาพขึ้นจอ</p>
         </div>
     </div>
 
@@ -43,67 +114,116 @@
 
         const displayImg = document.getElementById('displayImg');
         const closedOverlay = document.getElementById('closedOverlay');
-        const uploadUrl = "https://suchart28.github.io/photoup/"; 
-        let currentPhotos = [], slideInterval = null, manualOverride = false, currentMode = 'latest';
+        const uploadUrl = "https://suchart28.github.io/photoup/"; // URL ของหน้า index.html คุณ
+        
+        let currentPhotos = [];
+        let slideInterval = null;
+        let manualOverride = false;
+        let currentMode = 'latest';
 
-        // QR Code ขนาดใหญ่
-        const qrCfg = { text: uploadUrl, width: 400, height: 400, correctLevel: QRCode.CorrectLevel.H };
-        new QRCode(document.getElementById("qrcodeLeft"), qrCfg);
-        new QRCode(document.getElementById("qrcodeRight"), qrCfg);
+        // 1. สร้าง QR Code ขนาดใหญ่ (400px)
+        const qrOptions = {
+            text: uploadUrl,
+            width: 400,
+            height: 400,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H
+        };
+        new QRCode(document.getElementById("qrcodeLeft"), qrOptions);
+        new QRCode(document.getElementById("qrcodeRight"), qrOptions);
 
+        // 2. ฟังก์ชันแสดงรูปภาพพร้อม Effect Fade
         function showImage(url) {
-            if (displayImg.src === url) return;
+            if (!url || displayImg.src === url) return;
             displayImg.classList.add('fade-out');
-            setTimeout(() => { displayImg.src = url; displayImg.onload = () => displayImg.classList.remove('fade-out'); }, 800);
+            setTimeout(() => {
+                displayImg.src = url;
+                displayImg.onload = () => displayImg.classList.remove('fade-out');
+            }, 800);
         }
 
+        // 3. ฟังก์ชันเริ่มสไลด์โชว์
         function startSlideshow() {
             if (slideInterval) clearInterval(slideInterval);
+            
+            // สุ่มรูปแรกขึ้นมาทันที
+            if (currentPhotos.length > 0) {
+                const randIdx = Math.floor(Math.random() * currentPhotos.length);
+                showImage(currentPhotos[randIdx].url);
+            }
+
             slideInterval = setInterval(() => {
                 if (!manualOverride && currentPhotos.length > 0) {
-                    const randIdx = Math.floor(Math.random() * currentPhotos.length);
-                    showImage(currentPhotos[randIdx].url);
+                    const randomIndex = Math.floor(Math.random() * currentPhotos.length);
+                    showImage(currentPhotos[randomIndex].url);
                 }
-            }, 5000);
+            }, 5000); // เปลี่ยนรูปทุก 5 วินาที
         }
 
-        // ฟัง Config (Mode & System Status)
+        // 4. ฟังคำสั่ง Config (สถานะเปิด/ปิด และ โหมดการสุ่ม)
         onSnapshot(doc(db, "display", "config"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                currentMode = data.mode || 'latest';
                 
+                // เช็คการเปิด/ปิดระบบ
                 if (data.status === 'closed') {
-                    closedOverlay.classList.remove('hidden'); closedOverlay.classList.add('flex');
+                    closedOverlay.style.display = 'flex';
                     if (slideInterval) clearInterval(slideInterval);
+                    return; // หยุดการทำงานส่วนอื่น
                 } else {
-                    closedOverlay.classList.add('hidden'); closedOverlay.classList.remove('flex');
+                    closedOverlay.style.display = 'none';
+                }
+
+                // เช็คโหมดการสุ่ม (ถ้าโหมดเปลี่ยน ให้โหลดรูปใหม่)
+                if (currentMode !== data.mode) {
+                    currentMode = data.mode || 'latest';
                     updatePhotoListener();
                 }
+            } else {
+                // ถ้าไม่มีไฟล์ config ให้รันโหมดปกติ
+                updatePhotoListener();
             }
         });
 
-        let photoUnsub = null;
+        // 5. ฟังก์ชันดึงรูปจาก Firebase ตามโหมด
+        let photoUnsubscribe = null;
         function updatePhotoListener() {
-            if (photoUnsub) photoUnsub();
-            const q = currentMode === 'latest' 
-                ? query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(10))
-                : query(collection(db, "photos"), orderBy("timestamp", "desc"));
-            photoUnsub = onSnapshot(q, (snap) => {
-                currentPhotos = snap.docs.map(d => d.data());
-                if (!manualOverride && !slideInterval) startSlideshow();
+            if (photoUnsubscribe) photoUnsubscribe();
+
+            const photoCol = collection(db, "photos");
+            let q = query(photoCol, orderBy("timestamp", "desc"));
+
+            if (currentMode === 'latest') {
+                q = query(photoCol, orderBy("timestamp", "desc"), limit(10));
+            }
+
+            photoUnsubscribe = onSnapshot(q, (snapshot) => {
+                currentPhotos = snapshot.docs.map(d => d.data());
+                console.log(`โหลดข้อมูลใหม่: ${currentPhotos.length} รูป (โหมด: ${currentMode})`);
+                
+                // ถ้ามีรูป และยังไม่มีสไลด์ ให้เริ่มทำงาน
+                if (currentPhotos.length > 0 && !slideInterval) {
+                    startSlideshow();
+                }
             });
         }
 
-        // Force Display
+        // 6. ฟังคำสั่ง "ขึ้นจอทันที" จาก Admin (Manual Override)
         onSnapshot(doc(db, "display", "main"), (docSnap) => {
             if (docSnap.exists()) {
+                const data = docSnap.data();
                 manualOverride = true;
-                showImage(docSnap.data().currentImageUrl);
-                clearTimeout(window.mTimer);
-                window.mTimer = setTimeout(() => { manualOverride = false; }, 15000);
+                showImage(data.currentImageUrl);
+                
+                // หลังจาก 15 วินาที ให้กลับไปเป็นสไลด์โชว์ปกติ
+                clearTimeout(window.manualTimer);
+                window.manualTimer = setTimeout(() => {
+                    manualOverride = false;
+                }, 15000);
             }
         });
+
     </script>
 </body>
 </html>
