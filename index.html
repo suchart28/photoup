@@ -8,22 +8,14 @@
     <script src="https://cdn.jsdelivr.net/npm/browser-image-compression@2.0.1/dist/browser-image-compression.js"></script>
 </head>
 <body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4">
-    <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-sm text-center border-t-8 border-blue-600">
+    <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-sm text-center">
         <div class="text-6xl mb-6">📸</div>
-        <h1 class="text-2xl font-bold mb-2">แชร์ภาพของคุณ</h1>
-        <p class="text-gray-500 mb-8 text-sm">รูปภาพจะถูกส่งขึ้นจอใหญ่ทันที</p>
-        
+        <h1 class="text-2xl font-bold mb-6">ส่งรูปภาพร่วมสนุก</h1>
         <input type="file" id="photoInput" accept="image/*" class="hidden">
-        <button id="uploadBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-5 px-8 rounded-2xl w-full shadow-lg transition-all active:scale-95 text-lg">
-            เลือกรูปภาพ / ถ่ายรูป
+        <button id="uploadBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-5 px-8 rounded-full w-full shadow-lg active:scale-95 transition-all text-xl">
+            ถ่ายรูป / เลือกรูป
         </button>
-        
-        <div id="statusContainer" class="mt-6 hidden">
-            <p id="status" class="text-sm font-bold"></p>
-            <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
-                <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
-            </div>
-        </div>
+        <p id="status" class="mt-8 text-gray-500 font-medium">รูปภาพจะถูกส่งไปแสดงบนหน้าจอ!</p>
     </div>
 
     <script type="module">
@@ -33,57 +25,49 @@
         const photoInput = document.getElementById('photoInput');
         const uploadBtn = document.getElementById('uploadBtn');
         const statusTxt = document.getElementById('status');
-        const statusContainer = document.getElementById('statusContainer');
-        const progressBar = document.getElementById('progressBar');
 
-        uploadBtn.addEventListener('click', () => photoInput.click());
+        uploadBtn.onclick = () => photoInput.click();
 
-        photoInput.addEventListener('change', async (e) => {
+        photoInput.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
-            statusContainer.classList.remove('hidden');
-            statusTxt.innerText = "⏳ กำลังเตรียมรูปภาพ...";
-            statusTxt.className = "text-blue-500 font-bold";
-            progressBar.style.width = "30%";
+            statusTxt.innerText = "⏳ กำลังประมวลผลรูปภาพ...";
+            statusTxt.className = "mt-8 text-blue-500 font-bold";
             uploadBtn.disabled = true;
             uploadBtn.classList.replace('bg-blue-600', 'bg-gray-400');
 
             try {
-                const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1280, useWebWorker: true };
-                const compressedFile = await imageCompression(file, options);
-                progressBar.style.width = "60%";
+                // บีบอัดภาพเพื่อความรวดเร็วและแก้ปัญหาภาพกลับหัว
+                const opt = { maxSizeMB: 0.5, maxWidthOrHeight: 1200, useWebWorker: true };
+                const compressed = await imageCompression(file, opt);
 
                 const reader = new FileReader();
-                reader.readAsDataURL(compressedFile);
+                reader.readAsDataURL(compressed);
                 reader.onloadend = async () => {
-                    const base64data = reader.result;
                     statusTxt.innerText = "🚀 กำลังอัปโหลด...";
-                    
                     await addDoc(collection(db, "photos"), {
-                        url: base64data,
+                        url: reader.result,
                         timestamp: serverTimestamp()
                     });
 
-                    progressBar.style.width = "100%";
-                    statusTxt.innerText = "✅ ส่งรูปภาพสำเร็จ!";
-                    statusTxt.className = "text-green-500 font-bold";
+                    statusTxt.innerText = "✅ ส่งสำเร็จแล้ว!";
+                    statusTxt.className = "mt-8 text-green-600 font-bold";
                     
                     setTimeout(() => {
-                        statusContainer.classList.add('hidden');
-                        progressBar.style.width = "0%";
-                        uploadBtn.disabled = false;
-                        uploadBtn.classList.replace('bg-gray-400', 'bg-blue-600');
-                        photoInput.value = '';
-                    }, 2500);
+                        statusTxt.innerText = "ส่งรูปภาพเพิ่มได้เลย!";
+                        statusTxt.className = "mt-8 text-gray-500 font-medium";
+                    }, 3000);
                 };
-            } catch (error) {
-                statusTxt.innerText = "❌ เกิดข้อผิดพลาด กรุณาลองใหม่";
-                statusTxt.className = "text-red-500 font-bold";
+            } catch (err) {
+                alert("เกิดข้อผิดพลาด กรุณาลองใหม่");
+                statusTxt.innerText = "ส่งไม่สำเร็จ";
+            } finally {
                 uploadBtn.disabled = false;
                 uploadBtn.classList.replace('bg-gray-400', 'bg-blue-600');
+                photoInput.value = '';
             }
-        });
+        };
     </script>
 </body>
 </html>
