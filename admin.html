@@ -35,6 +35,7 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                
                 <div class="bg-gray-800 p-6 rounded-2xl border border-red-500/30">
                     <h2 class="text-xl font-bold mb-4 flex items-center gap-2">⚠️ สถานะการเข้าถึงระบบ</h2>
                     <div class="flex gap-4">
@@ -52,10 +53,15 @@
                     </div>
                     <p id="currentModeStatus" class="mt-3 text-center text-blue-400 font-medium">กำลังโหลด...</p>
                 </div>
+
             </div>
 
-            <h2 class="text-2xl font-bold mb-4">🖼️ คัดกรองรูปภาพ (แสดง 60 รูปล่าสุด)</h2>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold">🖼️ คัดกรองรูปภาพ</h2>
+                <p class="text-sm text-gray-400">ดึง 60 รูปล่าสุดมาแสดง</p>
+            </div>
             <div id="gallery" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+            
         </div>
     </div>
 
@@ -63,78 +69,121 @@
         import { db } from './firebase-config.js';
         import { collection, query, orderBy, limit, onSnapshot, doc, setDoc, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
-        // --- Auth ---
+        // --- ระบบ Login ---
         const ADMIN_PIN = "878556";
         if (sessionStorage.getItem('adminAuth') === 'true') grantAccess();
+        
         document.getElementById('loginBtn').addEventListener('click', () => {
             if (document.getElementById('pinInput').value === ADMIN_PIN) {
                 sessionStorage.setItem('adminAuth', 'true');
                 grantAccess();
-            } else { alert("รหัสผ่านผิด!"); }
+            } else { 
+                alert("รหัสผ่านผิด!"); 
+            }
         });
+        
         function grantAccess() {
             document.getElementById('loginOverlay').classList.add('hidden');
             document.getElementById('adminContent').classList.remove('hidden');
         }
 
-        // --- ฟังสถานะ Config (Mode & System Status) ---
+        // --- ดึงสถานะปัจจุบันของระบบ (Config) ---
         onSnapshot(doc(db, "display", "config"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 
-                // Update System Status
+                // อัปเดต UI เปิด/ปิด ระบบ
                 const isClosed = data.status === 'closed';
                 document.getElementById('systemStatusLabel').innerText = isClosed ? '🔴 ระบบถูกปิดการใช้งาน' : '🟢 ระบบเปิดใช้งานปกติ';
                 document.getElementById('systemStatusLabel').className = isClosed ? 'mt-3 text-center font-medium text-red-400' : 'mt-3 text-center font-medium text-green-400';
+                
                 document.getElementById('btnOpenSystem').className = !isClosed ? 'flex-1 bg-green-600 py-4 rounded-xl font-bold' : 'flex-1 bg-gray-700 py-4 rounded-xl font-bold';
                 document.getElementById('btnCloseSystem').className = isClosed ? 'flex-1 bg-red-600 py-4 rounded-xl font-bold' : 'flex-1 bg-gray-700 py-4 rounded-xl font-bold';
 
-                // Update Mode
+                // อัปเดต UI โหมดการสุ่ม
                 const mode = data.mode || 'latest';
                 document.getElementById('currentModeStatus').innerText = `ปัจจุบัน: สุ่ม${mode === 'latest' ? ' 10 ภาพล่าสุด' : 'ภาพทั้งหมด'}`;
+                
                 document.getElementById('setModeLatest').className = mode === 'latest' ? 'flex-1 bg-blue-600 py-4 rounded-xl font-bold' : 'flex-1 bg-gray-700 py-4 rounded-xl font-bold';
                 document.getElementById('setModeAll').className = mode === 'all' ? 'flex-1 bg-blue-600 py-4 rounded-xl font-bold' : 'flex-1 bg-gray-700 py-4 rounded-xl font-bold';
             }
         });
 
-        // --- คำสั่ง Config ---
+        // --- ปุ่มสั่งงาน Config ---
         document.getElementById('btnOpenSystem').onclick = () => setDoc(doc(db, "display", "config"), { status: 'open' }, { merge: true });
-        document.getElementById('btnCloseSystem').onclick = () => confirm("ปิดระบบหน้าจอ?") && setDoc(doc(db, "display", "config"), { status: 'closed' }, { merge: true });
+        document.getElementById('btnCloseSystem').onclick = () => {
+            if(confirm("หน้าจอ Display จะถูกระงับทันที ยืนยันปิดระบบหรือไม่?")) {
+                setDoc(doc(db, "display", "config"), { status: 'closed' }, { merge: true });
+            }
+        };
+        
         document.getElementById('setModeLatest').onclick = () => setDoc(doc(db, "display", "config"), { mode: 'latest' }, { merge: true });
         document.getElementById('setModeAll').onclick = () => setDoc(doc(db, "display", "config"), { mode: 'all' }, { merge: true });
 
-        // --- Gallery Real-time (Optimized) ---
+        // --- การแสดงแกลเลอรี่รูปภาพ (ดึงภาพใหม่ล่าสุดเสมอ) ---
         const gallery = document.getElementById('gallery');
-        const q = query(collection(db, "photos"), orderBy("timestamp", "asc"), limit(60));
+        
+        // ใช้ desc เพื่อให้ภาพที่เพิ่งอัปโหลดใหม่ล่าสุดอยู่บนสุดเสมอ และจำกัด 60 รูปเพื่อไม่ให้แอดมินโหลดหนัก
+        const q = query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(60));
 
         onSnapshot(q, (snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-                if (change.type === "added") {
-                    const data = change.doc.data();
-                    const docId = change.doc.id;
-                    const card = document.createElement('div');
-                    card.id = `card-${docId}`;
-                    card.className = "bg-gray-800 rounded-xl overflow-hidden border border-gray-700 fade-in";
-                    card.innerHTML = `
-                        <div class="h-32 bg-black"><img src="${data.url}" loading="lazy" class="w-full h-full object-cover"></div>
-                        <div class="p-2 grid gap-1">
-                            <button class="bg-green-600 text-white py-1 rounded text-[10px] send-btn">ขึ้นจอ</button>
-                            <button class="bg-red-600 text-white py-1 rounded text-[10px] delete-btn">ลบ</button>
-                        </div>
-                    `;
-                    gallery.insertBefore(card, gallery.firstChild);
-                    card.querySelector('.send-btn').onclick = () => setDoc(doc(db, "display", "main"), { currentImageUrl: data.url, time: Date.now() });
-                    card.querySelector('.delete-btn').onclick = () => confirm("ลบรูปนี้?") && deleteDoc(doc(db, "photos", docId));
-                }
-                if (change.type === "removed") { document.getElementById(`card-${change.doc.id}`)?.remove(); }
+            // เคลียร์กระดานและวาดใหม่ ป้องกันบัคลำดับภาพเพี้ยน
+            gallery.innerHTML = ''; 
+            
+            snapshot.docs.forEach((docSnap) => {
+                const data = docSnap.data();
+                const docId = docSnap.id;
+                
+                // ข้ามรูปที่กำลังอัปโหลดและเวลายังไม่ถูกบันทึก
+                if (!data.timestamp) return; 
+
+                const card = document.createElement('div');
+                card.id = `card-${docId}`;
+                card.className = "bg-gray-800 rounded-xl overflow-hidden border border-gray-700 fade-in";
+                
+                card.innerHTML = `
+                    <div class="h-32 bg-black">
+                        <img src="${data.url}" loading="lazy" class="w-full h-full object-cover">
+                    </div>
+                    <div class="p-2 grid gap-1">
+                        <button class="bg-green-600 hover:bg-green-500 text-white py-2 rounded text-xs font-bold send-btn transition-colors">ขึ้นจอทันที</button>
+                        <button class="bg-red-600 hover:bg-red-500 text-white py-1 rounded text-[10px] delete-btn transition-colors">ลบ</button>
+                    </div>
+                `;
+                
+                gallery.appendChild(card);
+                
+                // สั่งภาพขึ้นจอแบบ Manual Override
+                card.querySelector('.send-btn').onclick = () => {
+                    setDoc(doc(db, "display", "main"), { currentImageUrl: data.url, time: Date.now() });
+                    // สร้าง Feedback ให้แอดมินรู้ว่ากดติดแล้ว
+                    const btn = card.querySelector('.send-btn');
+                    btn.innerText = "ส่งแล้ว!";
+                    btn.classList.replace('bg-green-600', 'bg-blue-600');
+                    setTimeout(() => {
+                        btn.innerText = "ขึ้นจอทันที";
+                        btn.classList.replace('bg-blue-600', 'bg-green-600');
+                    }, 2000);
+                };
+
+                // ปุ่มลบรูป
+                card.querySelector('.delete-btn').onclick = () => {
+                    if (confirm("ต้องการลบรูปภาพนี้ออกจากระบบใช่หรือไม่?")) {
+                        deleteDoc(doc(db, "photos", docId));
+                    }
+                };
             });
         });
 
-        // --- Clear All ---
+        // --- ปุ่มเคลียร์ภาพทั้งหมด (ลบถาวร) ---
         document.getElementById('clearAllBtn').onclick = async () => {
-            if (confirm("ลบรูปทั้งหมดในระบบ?") && confirm("ยันยืนอีกครั้ง! ลบถาวรนะครับ?")) {
-                const snap = await getDocs(collection(db, "photos"));
-                snap.forEach(d => deleteDoc(doc(db, "photos", d.id)));
+            if (confirm("คุณกำลังจะลบรูปทั้งหมดในระบบ ข้อมูลนี้กู้คืนไม่ได้! \n\nยืนยันการลบใช่หรือไม่?")) {
+                if (confirm("ย้ำอีกครั้ง! ระบบจะลบรูปทั้งหมดออกจากฐานข้อมูลทันทีนะ?")) {
+                    const snap = await getDocs(collection(db, "photos"));
+                    const deletePromises = snap.docs.map(d => deleteDoc(doc(db, "photos", d.id)));
+                    await Promise.all(deletePromises);
+                    alert("ล้างระบบเรียบร้อยแล้ว");
+                }
             }
         };
     </script>
