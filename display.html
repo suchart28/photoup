@@ -3,12 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Display MAX Screen - Chakra Petch Font</title>
+    <title>Display MAX Screen - Fast Sync</title>
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
-        /* ตั้งค่าฟอนต์หลักและพื้นหลังจอ */
         body { 
             background-color: #000; 
             overflow: hidden; 
@@ -20,7 +19,6 @@
             width: 100vw; 
             font-family: 'Chakra Petch', sans-serif; 
         }
-
         .main-container { 
             display: flex; 
             align-items: center; 
@@ -29,8 +27,6 @@
             height: 100%; 
             padding: 0 1.5%; 
         }
-
-        /* กรอบรูปตรงกลาง ขยายใหญ่เต็มที่ */
         .image-frame { 
             height: 96vh; 
             aspect-ratio: 1 / 1; 
@@ -41,15 +37,12 @@
             background: #111; 
             position: relative;
         }
-
         #displayImg { 
             width: 100%; 
             height: 100%; 
             object-fit: cover; 
-            transition: opacity 0.5s ease-in-out; /* ลดเวลาลงเหลือ 0.5s ให้ภาพตอบสนองไวขึ้น */
+            transition: opacity 0.4s ease-in-out; /* ปรับ Fade ให้เร็วขึ้นอีกนิด */
         }
-
-        /* กล่อง QR Code ด้านข้าง */
         .qr-side { 
             background: white; 
             padding: 2.5rem; 
@@ -58,7 +51,6 @@
             flex-shrink: 0; 
             box-shadow: 0 20px 50px rgba(0,0,0,0.5);
         }
-
         .qr-label { 
             color: #000; 
             font-weight: 700; 
@@ -66,20 +58,11 @@
             font-size: 2.8rem; 
             line-height: 1.1;
         }
-
         .fade-out { opacity: 0; }
-
-        /* หน้าจอตอนแอดมินสั่งปิดระบบ */
         #closedOverlay { 
-            position: fixed; 
-            inset: 0; 
-            background: #000; 
-            z-index: 9999; 
-            display: none; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: center; 
-            text-align: center; 
+            position: fixed; inset: 0; background: #000; z-index: 9999; 
+            display: none; flex-direction: column; align-items: center; 
+            justify-content: center; text-align: center; 
         }
     </style>
 </head>
@@ -95,22 +78,20 @@
     <div class="main-container">
         <div class="qr-side">
             <div id="qrcodeLeft"></div>
-            <p class="qr-label">สแกน QR<br>เพื่อส่งภาพขึ้นจอ</p>
+            <p class="qr-label">สแกน<br>เพื่อส่งภาพขึ้นจอ</p>
         </div>
-
         <div class="image-frame">
-            <img id="displayImg" src="" alt="Waiting for photos...">
+            <img id="displayImg" src="" alt="Waiting...">
         </div>
-
         <div class="qr-side">
             <div id="qrcodeRight"></div>
-             <p class="qr-label">สแกน QR<br>เพื่อส่งภาพขึ้นจอ</p>
+            <p class="qr-label">สแกน<br>เพื่อส่งภาพขึ้นจอ</p>
         </div>
     </div>
 
     <script type="module">
         import { db } from './firebase-config.js';
-        import { collection, query, orderBy, limit, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+        import { collection, query, orderBy, limit, onSnapshot, doc, setDoc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
         const displayImg = document.getElementById('displayImg');
         const closedOverlay = document.getElementById('closedOverlay');
@@ -121,60 +102,44 @@
         let manualOverride = false;
         let currentMode = 'latest';
 
-        // 1. สร้าง QR Code
-        const qrOptions = {
-            text: uploadUrl,
-            width: 400,
-            height: 400,
-            colorDark: "#000000",
-            colorLight: "#ffffff",
-            correctLevel: QRCode.CorrectLevel.H
-        };
-        new QRCode(document.getElementById("qrcodeLeft"), qrOptions);
-        new QRCode(document.getElementById("qrcodeRight"), qrOptions);
+        // 1. QR Code
+        new QRCode(document.getElementById("qrcodeLeft"), { text: uploadUrl, width: 400, height: 400 });
+        new QRCode(document.getElementById("qrcodeRight"), { text: uploadUrl, width: 400, height: 400 });
 
-        // 2. ฟังก์ชันแสดงภาพ (พร้อม Effect)
+        // 2. ฟังก์ชันแสดงภาพ (Fast Transition)
         function showImage(url) {
             if (!url || displayImg.src === url) return;
             displayImg.classList.add('fade-out');
             setTimeout(() => {
                 displayImg.src = url;
                 displayImg.onload = () => displayImg.classList.remove('fade-out');
-            }, 500); 
+            }, 400); 
         }
 
-        // 3. ฟังก์ชันสไลด์โชว์
-        function startSlideshow() {
-            if (slideInterval) clearInterval(slideInterval);
-            
-            if (currentPhotos.length > 0 && !manualOverride) {
+        // 3. ฟังก์ชันเลือกภาพสุ่ม
+        function pickRandomImage() {
+            if (currentPhotos.length > 0) {
                 const randIdx = Math.floor(Math.random() * currentPhotos.length);
                 showImage(currentPhotos[randIdx].url);
             }
-            
-            slideInterval = setInterval(() => {
-                if (!manualOverride && currentPhotos.length > 0) {
-                    const randomIndex = Math.floor(Math.random() * currentPhotos.length);
-                    showImage(currentPhotos[randomIndex].url);
-                }
-            }, 5000);
         }
 
-        // 4. ฟังคำสั่ง Config (โหมดการสุ่ม และ สถานะระบบ)
+        // 4. เริ่มสไลด์โชว์ (5 วินาที)
+        function startSlideshow() {
+            if (slideInterval) clearInterval(slideInterval);
+            pickRandomImage(); // ขึ้นภาพแรกทันที
+            slideInterval = setInterval(() => {
+                if (!manualOverride) pickRandomImage();
+            }, 5000); 
+        }
+
+        // 5. ติดตาม Config
         onSnapshot(doc(db, "display", "config"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
+                closedOverlay.style.display = (data.status === 'closed') ? 'flex' : 'none';
+                if (data.status === 'closed' && slideInterval) clearInterval(slideInterval);
                 
-                // เช็คสถานะ เปิด/ปิด ระบบ
-                if (data.status === 'closed') {
-                    closedOverlay.style.display = 'flex';
-                    if (slideInterval) clearInterval(slideInterval);
-                    return;
-                } else {
-                    closedOverlay.style.display = 'none';
-                }
-                
-                // เช็คโหมด
                 if (currentMode !== data.mode) {
                     currentMode = data.mode || 'latest';
                     updatePhotoListener();
@@ -184,51 +149,36 @@
             }
         });
 
-        // 5. ดึงข้อมูลภาพแบบจำกัดจำนวน (ลดอาการค้าง)
+        // 6. ดึงข้อมูลภาพ
         let photoUnsubscribe = null;
         function updatePhotoListener() {
             if (photoUnsubscribe) photoUnsubscribe();
-            
-            const photoCol = collection(db, "photos");
-            let q;
-            
-            if (currentMode === 'latest') {
-                q = query(photoCol, orderBy("timestamp", "desc"), limit(10));
-            } else {
-                // จำกัดแค่ 100 รูปเพื่อไม่ให้หน้าเว็บและอินเทอร์เน็ตโหลดหนักเกินไป
-                q = query(photoCol, orderBy("timestamp", "desc"), limit(100)); 
-            }
+            const q = (currentMode === 'latest') 
+                ? query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(10))
+                : query(collection(db, "photos"), orderBy("timestamp", "desc"), limit(100));
 
             photoUnsubscribe = onSnapshot(q, (snapshot) => {
                 currentPhotos = snapshot.docs.map(d => d.data());
-                console.log(`ดึงข้อมูลสำเร็จ: ${currentPhotos.length} รูป`);
-                if (currentPhotos.length > 0 && !slideInterval) {
-                    startSlideshow();
-                }
+                if (currentPhotos.length > 0 && !slideInterval) startSlideshow();
             });
         }
 
-        // 6. ฟังคำสั่ง "ขึ้นจอทันที" จาก Admin
+        // 7. Manual Override (แสดง 5 วินาทีแล้วกลับไปสุ่มต่อทันที)
         onSnapshot(doc(db, "display", "main"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 const now = Date.now();
                 
-                // ทำงานเฉพาะคำสั่งที่กดมาไม่เกิน 15 วินาที
-                if (now - data.time < 15000) {
+                // ตรวจสอบว่าเป็นคำสั่งใหม่ (ภายใน 5 วินาทีที่กด)
+                if (now - data.time < 5000) {
                     manualOverride = true;
                     showImage(data.currentImageUrl);
                     
                     clearTimeout(window.manualTimer);
                     window.manualTimer = setTimeout(() => {
                         manualOverride = false;
-                        
-                        // เมื่อหมดเวลาโชว์ภาพบังคับ ให้สุ่มภาพใหม่ขึ้นมา 1 ภาพทันที
-                        if (currentPhotos.length > 0) {
-                            const randomIndex = Math.floor(Math.random() * currentPhotos.length);
-                            showImage(currentPhotos[randomIndex].url);
-                        }
-                    }, 15000); // แสดงภาพที่แอดมินเลือกค้างไว้ 15 วินาที
+                        pickRandomImage(); // หมดเวลา 5 วิ รีบสุ่มภาพถัดไปขึ้นมาทันที
+                    }, 5000); 
                 }
             }
         });
