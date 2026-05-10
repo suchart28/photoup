@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Display MAX Screen - Right Side QR</title>
+    <title>Display MAX Screen - with Countdown</title>
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -22,11 +22,11 @@
         .main-container { 
             display: flex; 
             align-items: center; 
-            justify-content: center; /* เปลี่ยนเป็น center เพื่อความสมดุล */
+            justify-content: center; 
             width: 100%; 
             height: 100%; 
             padding: 0 2%; 
-            gap: 3%; /* เว้นระยะห่างระหว่างรูปกับ QR Code */
+            gap: 3%; 
         }
         .image-frame { 
             height: 96vh; 
@@ -55,9 +55,10 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            width: 460px; /* ล็อกความกว้างฝั่ง QR เพื่อไม่ให้ขยับ */
         }
         .display-logo {
-            max-width: 280px; /* ปรับขนาดโลโก้ให้ใหญ่ขึ้นเล็กน้อยเมื่อมีฝั่งเดียว */
+            max-width: 280px; 
             max-height: 150px;
             object-fit: contain;
             margin-bottom: 2rem; 
@@ -67,7 +68,7 @@
             color: #000; 
             font-weight: 700; 
             margin-top: 1.5rem; 
-            font-size: 3rem; /* ปรับขนาดตัวอักษรให้ชัดเจนขึ้น */
+            font-size: 3rem; 
             line-height: 1.1;
         }
         .fade-out { opacity: 0; }
@@ -96,6 +97,10 @@
             <img id="logoRight" class="display-logo" src="" alt="Logo">
             <div id="qrcodeRight"></div>
             <p class="qr-label">SCAN<br>TO POST</p>
+            
+            <div class="mt-6 bg-gray-100 rounded-2xl py-3 px-2 w-full border-2 border-gray-200">
+                <p id="countdownText" class="text-gray-500 font-bold text-xl md:text-2xl">รอรูปภาพสักครู่...</p>
+            </div>
         </div>
     </div>
 
@@ -105,18 +110,47 @@
 
         const displayImg = document.getElementById('displayImg');
         const closedOverlay = document.getElementById('closedOverlay');
+        const countdownEl = document.getElementById('countdownText');
         const uploadUrl = "https://suchart28.github.io/photoup/"; 
         
         let currentPhotos = [];
         let slideInterval = null;
         let manualOverride = false;
         let currentMode = 'latest';
+        
+        // ตัวแปรสำหรับนับถอยหลัง
+        let countdownValue = 5;
+        let countdownInterval = null;
 
-        // สร้าง QR Code เฉพาะฝั่งขวา
         new QRCode(document.getElementById("qrcodeRight"), { text: uploadUrl, width: 420, height: 420 });
 
+        // ฟังก์ชันนับถอยหลัง (อัปเดตตัวเลขทุกวินาที)
+        function startCountdown() {
+            countdownValue = 5;
+            countdownEl.innerText = `รูปต่อไปจะแสดงในอีก ${countdownValue} วินาที`;
+            
+            if (countdownInterval) clearInterval(countdownInterval);
+            
+            countdownInterval = setInterval(() => {
+                countdownValue--;
+                if (countdownValue > 0) {
+                    countdownEl.innerText = `รูปต่อไปจะแสดงในอีก ${countdownValue} วินาที`;
+                } else {
+                    countdownEl.innerText = `กำลังเปลี่ยนรูป...`;
+                }
+            }, 1000);
+        }
+
         function showImage(url) {
-            if (!url || displayImg.src === url) return;
+            // ถ้ารูปเดิมให้แค่เริ่มนับถอยหลังใหม่
+            if (!url || displayImg.src === url) {
+                startCountdown();
+                return;
+            }
+            
+            // เริ่มนับถอยหลังใหม่ทันทีที่สั่งเปลี่ยนรูป
+            startCountdown();
+            
             displayImg.classList.add('fade-out');
             setTimeout(() => {
                 displayImg.src = url;
@@ -144,15 +178,20 @@
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 
-                closedOverlay.style.display = (data.status === 'closed') ? 'flex' : 'none';
-                if (data.status === 'closed' && slideInterval) clearInterval(slideInterval);
+                if (data.status === 'closed') {
+                    closedOverlay.style.display = 'flex';
+                    if (slideInterval) clearInterval(slideInterval);
+                    if (countdownInterval) clearInterval(countdownInterval); // หยุดนับถอยหลังด้วยเมื่อปิดระบบ
+                } else {
+                    closedOverlay.style.display = 'none';
+                }
                 
                 if (currentMode !== data.mode) {
                     currentMode = data.mode || 'latest';
                     updatePhotoListener();
                 }
 
-                // จัดการ Logo ฝั่งขวา
+                // จัดการ Logo
                 const logoRight = document.getElementById('logoRight');
                 if (data.logoUrl) {
                     logoRight.src = data.logoUrl;
@@ -179,7 +218,7 @@
             });
         }
 
-        // ฟังคำสั่ง Manual Override (5 วินาที)
+        // ฟังคำสั่ง Manual Override (บังคับขึ้นจอ)
         onSnapshot(doc(db, "display", "main"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
@@ -187,6 +226,7 @@
                 if (now - data.time < 5000) {
                     manualOverride = true;
                     showImage(data.currentImageUrl);
+                    
                     clearTimeout(window.manualTimer);
                     window.manualTimer = setTimeout(() => {
                         manualOverride = false;
