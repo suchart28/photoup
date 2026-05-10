@@ -3,13 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Display MAX Screen - with Countdown</title>
+    <title>Display MAX Screen - Gradient & Clock</title>
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
+        /* สร้าง Animation ให้พื้นหลังไล่สี */
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
         body { 
-            background-color: #000; 
+            /* พื้นหลังไล่สีโทนเข้ม-หรูหรา */
+            background: linear-gradient(-45deg, #0a0a0a, #1a1a2e, #16213e, #0f3460);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
             overflow: hidden; 
             margin: 0; 
             display: flex; 
@@ -46,7 +56,7 @@
         }
         .qr-side { 
             background: white; 
-            padding: 2.5rem; 
+            padding: 2rem; 
             border-radius: 40px; 
             text-align: center; 
             flex-shrink: 0; 
@@ -55,21 +65,35 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            width: 460px; /* ล็อกความกว้างฝั่ง QR เพื่อไม่ให้ขยับ */
+            width: 460px;
+            max-height: 96vh;
+        }
+        /* สไตล์ของนาฬิกา */
+        .clock-display {
+            font-size: 3rem;
+            font-weight: 700;
+            color: #1e293b;
+            background: #f8fafc;
+            padding: 0.5rem 2rem;
+            border-radius: 20px;
+            border: 2px solid #e2e8f0;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+            margin-bottom: 1.5rem;
+            letter-spacing: 2px;
         }
         .display-logo {
-            max-width: 280px; 
-            max-height: 150px;
+            max-width: 250px; 
+            max-height: 120px;
             object-fit: contain;
-            margin-bottom: 2rem; 
+            margin-bottom: 1.5rem; 
             display: none; 
         }
         .qr-label { 
             color: #000; 
             font-weight: 700; 
             margin-top: 1.5rem; 
-            font-size: 3rem; 
-            line-height: 1.1;
+            font-size: 2.2rem; /* ปรับขนาดฟอนต์ให้พอดีกับคำไทย */
+            line-height: 1.2;
         }
         .fade-out { opacity: 0; }
         #closedOverlay { 
@@ -94,11 +118,14 @@
         </div>
 
         <div class="qr-side">
-            <img id="logoRight" class="display-logo" src="" alt="Logo">
-            <div id="qrcodeRight"></div>
-            <p class="qr-label">SCAN<br>TO POST</p>
+            <div id="clockText" class="clock-display">00:00:00</div>
             
-            <div class="mt-6 bg-gray-100 rounded-2xl py-3 px-2 w-full border-2 border-gray-200">
+            <img id="logoRight" class="display-logo" src="" alt="Logo">
+            
+            <div id="qrcodeRight"></div>
+            <p class="qr-label">สแกนเพื่อส่ง<br>ภาพขึ้นจอ</p>
+            
+            <div class="mt-4 bg-gray-100 rounded-2xl py-3 px-2 w-full border-2 border-gray-200">
                 <p id="countdownText" class="text-gray-500 font-bold text-xl md:text-2xl">รอรูปภาพสักครู่...</p>
             </div>
         </div>
@@ -108,6 +135,17 @@
         import { db } from './firebase-config.js';
         import { collection, query, orderBy, limit, onSnapshot, doc } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
+        // --- ระบบนาฬิกาเรียลไทม์ ---
+        function updateClock() {
+            const now = new Date();
+            // จัดรูปแบบให้เป็น 24 ชั่วโมง (เช่น 14:05:09)
+            const timeString = now.toLocaleTimeString('th-TH', { hour12: false });
+            document.getElementById('clockText').innerText = timeString;
+        }
+        setInterval(updateClock, 1000); // อัปเดตทุกๆ 1 วินาที
+        updateClock(); // เรียกครั้งแรกทันทีตอนโหลดหน้า
+
+        // --- ตัวแปรสำหรับระบบแสดงรูปภาพ ---
         const displayImg = document.getElementById('displayImg');
         const closedOverlay = document.getElementById('closedOverlay');
         const countdownEl = document.getElementById('countdownText');
@@ -118,13 +156,12 @@
         let manualOverride = false;
         let currentMode = 'latest';
         
-        // ตัวแปรสำหรับนับถอยหลัง
+        // --- ระบบนับถอยหลัง (Countdown) ---
         let countdownValue = 5;
         let countdownInterval = null;
 
-        new QRCode(document.getElementById("qrcodeRight"), { text: uploadUrl, width: 420, height: 420 });
+        new QRCode(document.getElementById("qrcodeRight"), { text: uploadUrl, width: 380, height: 380 }); // ปรับลดขนาด QR นิดหน่อยให้บาลานซ์กับนาฬิกา
 
-        // ฟังก์ชันนับถอยหลัง (อัปเดตตัวเลขทุกวินาที)
         function startCountdown() {
             countdownValue = 5;
             countdownEl.innerText = `รูปต่อไปจะแสดงในอีก ${countdownValue} วินาที`;
@@ -142,15 +179,11 @@
         }
 
         function showImage(url) {
-            // ถ้ารูปเดิมให้แค่เริ่มนับถอยหลังใหม่
             if (!url || displayImg.src === url) {
                 startCountdown();
                 return;
             }
-            
-            // เริ่มนับถอยหลังใหม่ทันทีที่สั่งเปลี่ยนรูป
             startCountdown();
-            
             displayImg.classList.add('fade-out');
             setTimeout(() => {
                 displayImg.src = url;
@@ -173,7 +206,7 @@
             }, 5000); 
         }
 
-        // ติดตาม Config
+        // --- ฟังคำสั่งจาก Firebase ---
         onSnapshot(doc(db, "display", "config"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
@@ -181,7 +214,7 @@
                 if (data.status === 'closed') {
                     closedOverlay.style.display = 'flex';
                     if (slideInterval) clearInterval(slideInterval);
-                    if (countdownInterval) clearInterval(countdownInterval); // หยุดนับถอยหลังด้วยเมื่อปิดระบบ
+                    if (countdownInterval) clearInterval(countdownInterval); 
                 } else {
                     closedOverlay.style.display = 'none';
                 }
@@ -204,7 +237,7 @@
             }
         });
 
-        // ดึงข้อมูลภาพ
+        // --- ดึงข้อมูลภาพ ---
         let photoUnsubscribe = null;
         function updatePhotoListener() {
             if (photoUnsubscribe) photoUnsubscribe();
@@ -218,7 +251,7 @@
             });
         }
 
-        // ฟังคำสั่ง Manual Override (บังคับขึ้นจอ)
+        // --- ฟังคำสั่งบังคับส่ง (Manual) ---
         onSnapshot(doc(db, "display", "main"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
