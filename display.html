@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Display MAX Screen</title>
+    <title>Display MAX Screen - Right Side QR</title>
     <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -22,17 +22,18 @@
         .main-container { 
             display: flex; 
             align-items: center; 
-            justify-content: space-between; 
+            justify-content: center; /* เปลี่ยนเป็น center เพื่อความสมดุล */
             width: 100%; 
             height: 100%; 
-            padding: 0 1.5%; 
+            padding: 0 2%; 
+            gap: 3%; /* เว้นระยะห่างระหว่างรูปกับ QR Code */
         }
         .image-frame { 
             height: 96vh; 
             aspect-ratio: 1 / 1; 
             overflow: hidden; 
-            border-radius: 0px; 
-            border: 0px solid #000; 
+            border-radius: 20px; 
+            border: 12px solid #fff; 
             box-shadow: 0 0 60px rgba(255,255,255,0.15); 
             background: #111; 
             position: relative;
@@ -46,27 +47,27 @@
         .qr-side { 
             background: white; 
             padding: 2.5rem; 
-            border-radius: 0px; 
+            border-radius: 40px; 
             text-align: center; 
             flex-shrink: 0; 
-            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
         }
         .display-logo {
-            max-width: 400px;
-            max-height: 400px;
+            max-width: 280px; /* ปรับขนาดโลโก้ให้ใหญ่ขึ้นเล็กน้อยเมื่อมีฝั่งเดียว */
+            max-height: 150px;
             object-fit: contain;
-            margin-bottom: 1.5rem; /* ระยะห่างโลโก้กับ QR Code */
+            margin-bottom: 2rem; 
             display: none; 
         }
         .qr-label { 
             color: #000; 
             font-weight: 700; 
             margin-top: 1.5rem; 
-            font-size: 2.8rem; 
+            font-size: 3rem; /* ปรับขนาดตัวอักษรให้ชัดเจนขึ้น */
             line-height: 1.1;
         }
         .fade-out { opacity: 0; }
@@ -87,12 +88,6 @@
     </div>
 
     <div class="main-container">
-        <div class="qr-side">
-            <img id="logoLeft" class="display-logo" src="" alt="Logo">
-            <div id="qrcodeLeft"></div>
-            <p class="qr-label">สแกน<br>เพื่อส่งภาพขึ้นจอ</p>
-        </div>
-
         <div class="image-frame">
             <img id="displayImg" src="" alt="Waiting...">
         </div>
@@ -100,7 +95,7 @@
         <div class="qr-side">
             <img id="logoRight" class="display-logo" src="" alt="Logo">
             <div id="qrcodeRight"></div>
-            <p class="qr-label">สแกน<br>เพื่อส่งภาพขึ้นจอ</p>
+            <p class="qr-label">SCAN<br>TO POST</p>
         </div>
     </div>
 
@@ -117,9 +112,8 @@
         let manualOverride = false;
         let currentMode = 'latest';
 
-        // สร้าง QR Code
-        new QRCode(document.getElementById("qrcodeLeft"), { text: uploadUrl, width: 400, height: 400 });
-        new QRCode(document.getElementById("qrcodeRight"), { text: uploadUrl, width: 400, height: 400 });
+        // สร้าง QR Code เฉพาะฝั่งขวา
+        new QRCode(document.getElementById("qrcodeRight"), { text: uploadUrl, width: 420, height: 420 });
 
         function showImage(url) {
             if (!url || displayImg.src === url) return;
@@ -145,7 +139,7 @@
             }, 5000); 
         }
 
-        // ฟังคำสั่ง Config (ระบบ, โหมด, โลโก้)
+        // ติดตาม Config
         onSnapshot(doc(db, "display", "config"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
@@ -158,16 +152,12 @@
                     updatePhotoListener();
                 }
 
-                // จัดการ Logo
-                const logoLeft = document.getElementById('logoLeft');
+                // จัดการ Logo ฝั่งขวา
                 const logoRight = document.getElementById('logoRight');
                 if (data.logoUrl) {
-                    logoLeft.src = data.logoUrl;
                     logoRight.src = data.logoUrl;
-                    logoLeft.style.display = 'block';
                     logoRight.style.display = 'block';
                 } else {
-                    logoLeft.style.display = 'none';
                     logoRight.style.display = 'none';
                 }
             } else {
@@ -175,7 +165,7 @@
             }
         });
 
-        // ดึงภาพ
+        // ดึงข้อมูลภาพ
         let photoUnsubscribe = null;
         function updatePhotoListener() {
             if (photoUnsubscribe) photoUnsubscribe();
@@ -189,7 +179,7 @@
             });
         }
 
-        // บังคับขึ้นจอ (Manual)
+        // ฟังคำสั่ง Manual Override (5 วินาที)
         onSnapshot(doc(db, "display", "main"), (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
